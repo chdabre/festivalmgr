@@ -25,7 +25,7 @@ describe('revokeMembership', () => {
     await expect(wrapped({
       data: { orgId: 'lila', membershipId: 'm1' },
       auth: { uid: 'caller', token: { orgId: 'lila', role: 'pr' } },
-    } as never)).rejects.toThrow(/permission-denied/)
+    } as never)).rejects.toMatchObject({ code: 'permission-denied' })
   })
 
   it('marks revoked + clears claims for the affected user', async () => {

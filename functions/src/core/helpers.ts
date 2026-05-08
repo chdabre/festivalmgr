@@ -17,6 +17,6 @@ export function assertCallerHasRoleInOrg(
   assertSignedIn(req)
   const claims = req.auth.token as { orgId?: string; role?: Role }
   if (claims.orgId !== orgId || !claims.role || !allowedRoles.includes(claims.role)) {
-    throw new HttpsError('permission-denied', `permission-denied: required role(s): ${allowedRoles.join(', ')}.`)
+    throw new HttpsError('permission-denied', `Required role(s): ${allowedRoles.join(', ')}.`)
   }
 }
