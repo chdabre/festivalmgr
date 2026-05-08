@@ -2,6 +2,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-01-01',
   devtools: { enabled: true },
   modules: [
+    '@nuxt/ui',
     '@nuxtjs/i18n',
   ],
   css: ['~/assets/css/main.css'],
