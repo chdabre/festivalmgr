@@ -1,0 +1,17 @@
+node_modules
+.nuxt
+.output
+.data
+dist
+.env
+.env.*
+!.env.example
+.DS_Store
+.emulator-data/
+firebase-debug.log
+firestore-debug.log
+storage-debug.log
+ui-debug.log
+service-account*.json
+.netlify
+coverage

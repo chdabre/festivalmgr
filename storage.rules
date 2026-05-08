@@ -1,0 +1,13 @@
+// PERMISSIVE STARTER RULES — Plan A only.
+// Plan B replaces this with the layered, role-aware rule set + emulator rules tests.
+// DO NOT DEPLOY THIS FILE BEYOND THE LOCAL EMULATOR.
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

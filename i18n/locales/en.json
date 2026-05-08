@@ -1,0 +1,17 @@
+{
+  "app": {
+    "title": "festivalmgr"
+  },
+  "auth": {
+    "loginTitle": "Sign in to festivalmgr",
+    "magicLinkLabel": "Send sign-in link",
+    "googleLabel": "Continue with Google",
+    "emailPlaceholder": "you@example.com"
+  },
+  "nav": {
+    "events": "Events",
+    "members": "Members",
+    "settings": "Settings",
+    "signOut": "Sign out"
+  }
+}
