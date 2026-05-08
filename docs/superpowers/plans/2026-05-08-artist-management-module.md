@@ -11,8 +11,8 @@
 **Spec:** [docs/superpowers/specs/2026-05-08-artist-management-module-design.md](../specs/2026-05-08-artist-management-module-design.md)
 
 **Prerequisites (must be complete before this plan runs):**
-- [Plan A — bootstrap, auth & member admin](2026-05-08-festivalmgr-bootstrap-auth-admin.md) merged: core layer scaffolded, Firebase emulator wired up, login/dashboard/member-admin/event/location pages working, `useEvent` and `useLocation` composables exist.
-- This plan ships the artist `firestore.rules.frag` + tests but does NOT replace the platform-wide permissive rules from Plan A — that's Plan B's job. The artist tests run their fragment standalone against the emulator. Plan B is expected to compose all module fragments into the production rules file.
+- The platform bootstrap is complete: core layer scaffolded, Firebase emulator wired up, login/dashboard/member-admin/event/location pages working, `useEvent` and `useLocation` composables exist.
+- This plan ships the artist `firestore.rules.frag` + tests but does NOT replace the platform-wide permissive rules from the bootstrap — that's a later rules-hardening plan's job. The artist tests run their fragment standalone against the emulator. The rules-hardening plan is expected to compose all module fragments into the production rules file.
 
 ---
 
@@ -2710,7 +2710,7 @@ const onSave = async () => {
 </template>
 ```
 
-- [ ] **Step 2: Verify `useOrg` exposes `updateOrg`** (added in Plan A Task 7)
+- [ ] **Step 2: Verify `useOrg` exposes `updateOrg`** (added by the bootstrap plan)
 
 If it doesn't, add it now to `layers/core/composables/useOrg.ts`:
 ```ts
@@ -2816,7 +2816,7 @@ In one terminal:
 ```bash
 firebase emulators:start --only firestore --project festivalmgr-dev
 ```
-In another (after seeding the org and event via Plan A's `seed-director` script):
+In another (after seeding the org and event via the bootstrap's `seed-director` script):
 ```bash
 pnpm run seed:artists
 ```

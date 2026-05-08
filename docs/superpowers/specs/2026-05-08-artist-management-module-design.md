@@ -459,5 +459,5 @@ Designed-for, not built — addition is non-breaking:
 
 ### Dependencies on the platform foundation
 
-- The `core` layer must ship first (auth, claims, org, event, location, membership, rules helpers, compose-rules pipeline). Already covered by [Plan A — bootstrap, auth & member admin](../plans/2026-05-08-festivalmgr-bootstrap-auth-admin.md).
+- The `core` layer must ship first (auth, claims, org, event, location, membership, rules helpers, compose-rules pipeline). The bootstrap plan that delivers it is a separate prerequisite document.
 - The artist module assumes `event.dates` and `event.locations` exist. It reads them; it does not write them.
