@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "festivalmgr-dev",
+    "dev": "festivalmgr-dev",
+    "staging": "festivalmgr-staging",
+    "prod": "festivalmgr-prod"
+  }
+}
