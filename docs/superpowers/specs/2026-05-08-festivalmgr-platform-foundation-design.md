@@ -449,19 +449,23 @@ Each module = its own brainstorm → spec → plan → implement cycle. **One mo
 - **Schedule module:** the `TimetableEvent` shape (`startsAt`, `durationMin`, `locationId`, `artistId`, plus likely break/changeover/announcement variants) is designed in the Schedule brainstorm.
 - **Cross-module integration:** patterns for B-derives-from-A flows (e.g., budget items derived from confirmed artist fees) are decided per-module. The platform contract is "modules communicate through Firestore writes, not direct imports."
 
-## 15. First implementation slice (the platform foundation itself)
+## 15. First implementation slice (the platform foundation MVP)
 
 The platform foundation that gets implemented before any module work:
 
 1. Repo scaffold: Nuxt project, Firebase project, layers directory, functions directory, `firebase.json`, `.firebaserc`, `netlify.toml`.
 2. `core` layer: `Org`, `Membership`, `Event`, `Location`, `User` types; basic CRUD composables (`useOrg`, `useEvent`); login pages (magic-link + Google); member-admin pages.
 3. Auth flow end-to-end: magic-link, Google, custom-claim sync via `setMembership` Cloud Function, seed-director script.
-4. `compose-rules.ts` script + initial `firestore.rules` covering Org, Membership, Event, Location, ShareLink, plus the `publicEvent` rule.
+4. `compose-rules.ts` script + initial `firestore.rules` covering Org, Membership, Event, and Location.
 5. Rules tests for all of the above (happy paths, cross-tenant denial, role boundaries, anonymous denial, field-level constraints).
-6. Share-link infrastructure: `shareLinks` collection, `resolveShareLink` Cloud Function, public `/s/[token].vue` page.
-7. Public-mirror infrastructure: `onWrite` trigger writing `/publicEvent/{slug}`, public crowd-API HTTP endpoint reading from it.
-8. Local emulator dev workflow: `npm run dev`, `dev:seed`, `rules:check`.
-9. CI: GitHub Actions for PR rules tests + Netlify previews; manual workflow_dispatch for staging and prod deploys.
-10. Backups: daily Firestore export configured in prod.
+6. Local emulator dev workflow: `npm run dev`, `dev:seed`, `rules:check`.
+7. CI: GitHub Actions for PR rules tests + Netlify previews; manual workflow_dispatch for staging and prod deploys.
+8. Backups: daily Firestore export configured in prod.
 
-Once this lands, the **Artist Management module** is the next brainstorm.
+**Deferred from the MVP** (designed in §5 / §8 for forward-compat, implemented later):
+
+- Per-document share-links (`shareLinks` collection, `resolveShareLink` Cloud Function, `/s/[token].vue` public page).
+- Public crowd-API mirror (`/publicEvent/{slug}` denormalized doc, `onWrite` trigger maintaining it, HTTP endpoint reading it, the world-readable rule).
+- The `Event.publishToPublic` and `Event.publicSlug` fields stay in the type as forward-compat but are unused in MVP.
+
+Once the MVP lands, the **Artist Management module** is the next brainstorm.
