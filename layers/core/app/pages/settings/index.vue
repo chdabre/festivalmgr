@@ -53,7 +53,7 @@ async function save() {
               :model-value="editable.enabledModules.includes(m)"
               :disabled="!canEdit"
               :label="m"
-              @update:model-value="(checked: boolean) => editable.enabledModules = checked
+              @update:model-value="(checked) => editable.enabledModules = checked === true
                 ? [...editable.enabledModules, m]
                 : editable.enabledModules.filter(x => x !== m)" />
           </div>

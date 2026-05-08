@@ -8,11 +8,13 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ revoke: [id: string] }>()
 
-const roleColor: Record<Role, string> = {
+type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
+
+const roleColor: Record<Role, BadgeColor> = {
   director: 'primary', booker: 'info', production: 'success',
   finance: 'warning', pr: 'secondary', crew: 'neutral',
 }
-const statusColor: Record<Membership['status'], string> = {
+const statusColor: Record<Membership['status'], BadgeColor> = {
   active: 'success', pending: 'warning', revoked: 'neutral',
 }
 </script>
