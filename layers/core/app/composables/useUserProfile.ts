@@ -6,9 +6,8 @@ import type { User } from '#layers/core/shared/types'
 export function useUserProfile() {
   const auth = useCurrentUser()
   const db = useFirestore()
-  const profile = computed(() => {
-    if (!auth.value) return null
-    return useDocument<User>(doc(db, 'users', auth.value.uid))
-  })
-  return computed(() => profile.value?.value ?? null)
+  const docRef = computed(() =>
+    auth.value ? doc(db, 'users', auth.value.uid) : null,
+  )
+  return useDocument<User>(docRef)
 }
