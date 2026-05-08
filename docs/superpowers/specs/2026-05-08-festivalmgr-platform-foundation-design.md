@@ -8,7 +8,7 @@
 
 A cloud-based, multi-tenant SaaS for organizing community-based arts/music/culture festivals. Built first to replace the spreadsheet-and-Drive workflow at lila. queer festival (Zürich), structured from day one to onboard additional festival organizations later.
 
-The platform is a **modular monolith**: a single Nuxt 3 + Nuxt UI app and a single Firebase project, with each domain module isolated as a Nuxt **layer** so it can be developed, hidden per-tenant, or extracted later without coupling.
+The platform is a **modular monolith**: a single Nuxt 4 + Nuxt UI v4 app and a single Firebase project, with each domain module isolated as a Nuxt **layer** so it can be developed, hidden per-tenant, or extracted later without coupling.
 
 The architectural pattern is **Firebase-native, direct-from-client**: the Nuxt frontend talks directly to Firestore via the client SDK; security rules enforce auth and tenant isolation; Cloud Functions are used sparingly for things that genuinely require a server (email, scheduled jobs, public crowd-API, public mirror writes).
 
@@ -36,7 +36,7 @@ The architectural pattern is **Firebase-native, direct-from-client**: the Nuxt f
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Nuxt 3 + Nuxt UI (single project, modular monolith)        │
+│  Nuxt 4 + Nuxt UI v4 (single project, modular monolith)     │
 │  ├─ Auth-protected app (SPA-mode dynamic routes)            │
 │  ├─ Public share-link pages (SSR, indexable per-token)      │
 │  └─ Server routes (Nitro) — only for the public crowd API   │
@@ -64,15 +64,24 @@ The architectural pattern is **Firebase-native, direct-from-client**: the Nuxt f
 
 | Layer | Choice |
 |---|---|
-| Frontend | Nuxt 3 + Nuxt UI |
-| State / data | Firestore client SDK (direct), realtime listeners via composables |
-| Auth | Firebase Auth (email magic-link + Google sign-in) |
+| Frontend | Nuxt 4 + Nuxt UI v4 + Tailwind CSS v4 |
+| Firebase glue | **VueFire** (`nuxt-vuefire`) for client SDK wiring, SSR-safe composables (`useFirestore`, `useDocument`, `useCollection`, `useCurrentUser`), and emulator config |
+| State / data | Firestore client SDK via VueFire's realtime composables; app-specific composables (`useOrg`, `useEvent`, …) wrap them |
+| Auth | Firebase Auth (email magic-link + Google sign-in), exposed via VueFire's `useCurrentUser` |
 | File storage | Firebase Storage |
 | Server logic | Cloud Functions for Firebase (TypeScript) |
-| i18n | `@nuxtjs/i18n`, `defaultLocale: 'en'`, German added later |
-| Hosting | Netlify (frontend); Firebase project for everything else |
+| i18n | `@nuxtjs/i18n`, `defaultLocale: 'en'`, German added later. Nuxt UI v4.7+ auto-localizes `<ULink>` `to` props when this module is installed. |
+| Hosting | Netlify (frontend, zero-config Nitro preset); Firebase project for everything else |
 | CI/CD | GitHub Actions; Netlify previews per PR |
 | Testing | Vitest (unit/component); Firebase Rules Unit Testing SDK against the emulator |
+
+**Why VueFire over a hand-rolled `firebase/firestore` wrapper:** it's the only Firebase module on the official Nuxt registry, gives us idiomatic SSR-safe composables out of the box (relevant for §8a public share-link SSR pages), wires emulators with one config block, and the API surface we'd otherwise reinvent (`useDocument(ref)`, `useCollection(ref)`) matches what the rest of this spec already assumes.
+
+**Nuxt 4 specifics that shape the rest of this doc:**
+- App code lives under `app/`, with `server/` and `shared/` as siblings of it (see §9).
+- A single root `tsconfig.json`; Nuxt generates per-context type contexts internally.
+- Layers in `~~/layers/` are auto-registered (no `extends:` needed for local layers); each gets a named alias like `#layers/core`.
+- Nuxt 5 upgrade path: revisit `future.compatibilityVersion: 5` once Nuxt 5 ships. Not in scope for v1.
 
 ## 5. Multi-tenant Firestore data layout
 
@@ -266,7 +275,10 @@ Each module — `core`, `artists`, `budget`, `booking`, `riders`, `schedule` —
 
 ```
 /festivalmgr
-├── nuxt.config.ts                        (extends all enabled layers)
+├── nuxt.config.ts                        (auto-loads ~~/layers/* — no extends: needed)
+├── tsconfig.json                         (single root tsconfig in Nuxt 4)
+├── app/                                  (root-app entry; minimal — most code lives in layers)
+│   └── app.vue                           (wraps <UApp><NuxtPage /></UApp>)
 ├── netlify.toml
 ├── firebase.json
 ├── firestore.rules                       (composed from layer rule fragments)
@@ -281,12 +293,14 @@ Each module — `core`, `artists`, `budget`, `booking`, `riders`, `schedule` —
 │   │   └── ...
 │   └── package.json
 ├── /layers
-│   ├── /core                             (always loaded)
-│   │   ├── components/
-│   │   ├── composables/                  (useOrg, useEvent, useUser, useFirestore)
-│   │   ├── pages/                        (login, settings, member admin)
-│   │   ├── server/                       (Nitro routes if needed)
-│   │   ├── types/
+│   ├── /core                             (always loaded; auto-registered, alias #layers/core)
+│   │   ├── app/
+│   │   │   ├── components/
+│   │   │   ├── composables/              (useOrg, useEvent, useUser; wraps VueFire's useFirestore/useCurrentUser)
+│   │   │   ├── pages/                    (login, settings, member admin)
+│   │   │   └── assets/css/main.css       (@import "tailwindcss"; @import "@nuxt/ui";)
+│   │   ├── server/                       (Nitro routes if needed; sibling to app/)
+│   │   ├── shared/                       (types shared between app & server; e.g. Org, Event, Membership)
 │   │   ├── firestore.rules.frag
 │   │   └── nuxt.config.ts
 │   ├── /artists                          (first module to be brainstormed and built)
@@ -303,8 +317,9 @@ Each module — `core`, `artists`, `budget`, `booking`, `riders`, `schedule` —
 1. Real boundaries — a layer can't accidentally import another layer's internals; consumers go through public composables/types.
 2. Per-org module enable/disable becomes a tree-shake-friendly config change. For v1 all layers ship in the bundle and the UI hides modules absent from `org.enabledModules`; per-org bundling can be added later if it ever matters.
 3. A layer can be lifted into its own npm package when needed.
+4. Auto-registration: every directory under `~~/layers/` is loaded automatically (Nuxt ≥3.12) and exposed via the `#layers/<name>` alias (Nuxt ≥3.16). No `extends:` plumbing needed for local layers.
 
-**Layer dependency rule:** `core ← module`, never `module ← module`. A layer's public API is its types and composables; pages and components are consumed across layers but never imported into another layer's *internals*. When module A needs derived data from module B, the integration goes through Firestore (B writes, A subscribes), not direct imports.
+**Layer dependency rule:** `core ← module`, never `module ← module`. A layer's public API is its `shared/` types and `app/composables`; pages and components are consumed across layers but never imported into another layer's *internals*. When module A needs derived data from module B, the integration goes through Firestore (B writes, A subscribes), not direct imports.
 
 **Rule composition:** each layer ships a `firestore.rules.frag` covering only its own collections. A `compose-rules.ts` script concatenates fragments into the root `firestore.rules` at build/deploy time. Same pattern for `storage.rules`. Module rules live next to module code.
 
@@ -397,7 +412,7 @@ service cloud.firestore {
 ## 11. Local dev, environments, deploy
 
 ### Local
-- **Firebase Emulator Suite** for Firestore + Auth + Functions + Storage. Nuxt dev points at emulators when `FIREBASE_USE_EMULATOR=1`.
+- **Firebase Emulator Suite** for Firestore + Auth + Functions + Storage. VueFire's `vuefire.emulators` config block in `nuxt.config.ts` points the client at the emulators when `FIREBASE_USE_EMULATOR=1`.
 - Seed scripts populate a fake org, a director user, and a handful of fake artists for offline development.
 
 ```
@@ -453,14 +468,16 @@ Each module = its own brainstorm → spec → plan → implement cycle. **One mo
 
 The platform foundation that gets implemented before any module work:
 
-1. Repo scaffold: Nuxt project, Firebase project, layers directory, functions directory, `firebase.json`, `.firebaserc`, `netlify.toml`.
-2. `core` layer: `Org`, `Membership`, `Event`, `Location`, `User` types; basic CRUD composables (`useOrg`, `useEvent`); login pages (magic-link + Google); member-admin pages.
-3. Auth flow end-to-end: magic-link, Google, custom-claim sync via `setMembership` Cloud Function, seed-director script.
-4. `compose-rules.ts` script + initial `firestore.rules` covering Org, Membership, Event, and Location.
-5. Rules tests for all of the above (happy paths, cross-tenant denial, role boundaries, anonymous denial, field-level constraints).
-6. Local emulator dev workflow: `npm run dev`, `dev:seed`, `rules:check`.
-7. CI: GitHub Actions for PR rules tests + Netlify previews; manual workflow_dispatch for staging and prod deploys.
-8. Backups: daily Firestore export configured in prod.
+1. Repo scaffold: Nuxt 4 project (`npx nuxi@latest init`), Firebase project, `layers/` directory, `functions/` directory, `firebase.json`, `.firebaserc`, `netlify.toml`.
+2. UI baseline: install `@nuxt/ui` + `tailwindcss` (v4); add `app/assets/css/main.css` with `@import "tailwindcss"; @import "@nuxt/ui";`; wrap `app.vue` in `<UApp><NuxtPage /></UApp>`.
+3. Firebase glue: install `nuxt-vuefire` (and `firebase`, plus `firebase-admin` for SSR share-link pages); add `vuefire` config block to `nuxt.config.ts` with project credentials, `auth.enabled: true`, and emulator wiring gated on `FIREBASE_USE_EMULATOR=1`.
+4. `core` layer: `Org`, `Membership`, `Event`, `Location`, `User` types in `layers/core/shared/types/`; basic CRUD composables (`useOrg`, `useEvent`) in `layers/core/app/composables/` wrapping VueFire's `useDocument`/`useCollection`; login pages (magic-link + Google) and member-admin pages in `layers/core/app/pages/`.
+5. Auth flow end-to-end: magic-link, Google, custom-claim sync via `setMembership` Cloud Function, seed-director script.
+6. `compose-rules.ts` script + initial `firestore.rules` covering Org, Membership, Event, and Location.
+7. Rules tests for all of the above (happy paths, cross-tenant denial, role boundaries, anonymous denial, field-level constraints).
+8. Local emulator dev workflow: `npm run dev`, `dev:seed`, `rules:check`.
+9. CI: GitHub Actions for PR rules tests + Netlify previews; manual workflow_dispatch for staging and prod deploys.
+10. Backups: daily Firestore export configured in prod.
 
 **Deferred from the MVP** (designed in §5 / §8 for forward-compat, implemented later):
 

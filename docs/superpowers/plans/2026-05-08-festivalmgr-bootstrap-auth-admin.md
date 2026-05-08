@@ -2,15 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the Nuxt + Firebase repo skeleton, the `core` Nuxt layer with shared types and composables, the Cloud Functions for membership lifecycle, and the screens for login + org settings + member admin + events + locations — all running locally against the Firebase Emulator Suite.
+**Goal:** Stand up the Nuxt 4 + Firebase repo skeleton, the `core` Nuxt layer with shared types and composables, the Cloud Functions for membership lifecycle, and the screens for login + org settings + member admin + events + locations — all running locally against the Firebase Emulator Suite.
 
-**Architecture:** Modular monolith. Single Nuxt 3 + Nuxt UI app with `core` as a Nuxt layer; single Firebase project (Firestore + Auth + Functions + Storage). Frontend talks directly to Firestore via the client SDK; Cloud Functions handle only what requires server trust (membership writes, claim sync). Permissive starter rules in this plan; locked-down rules and tests come in Plan B.
+**Architecture:** Modular monolith. Single Nuxt 4 + Nuxt UI v4 + Tailwind CSS v4 app with `core` as a Nuxt layer; single Firebase project (Firestore + Auth + Functions + Storage). Firebase wiring goes through **VueFire** (`nuxt-vuefire`): the frontend reads/writes Firestore directly via VueFire's SSR-safe composables; Cloud Functions handle only what requires server trust (membership writes + custom-claim sync). Permissive starter rules in this plan; the locked-down rule set + emulator rules tests come in Plan B.
 
-**Tech Stack:** Nuxt 3, Nuxt UI, TypeScript, Firebase JS SDK v10+, Firebase Functions v2 (TS), Firebase Emulator Suite, Vitest, `@nuxtjs/i18n`, `pnpm`.
+**Tech Stack:** Nuxt 4, Nuxt UI v4, Tailwind CSS v4, VueFire (`nuxt-vuefire`), Firebase JS SDK 11+, Firebase Functions v2 (TS), Firebase Admin SDK, Firebase Emulator Suite, Vitest, `@nuxtjs/i18n`, pnpm.
 
 **Reference spec:** [docs/superpowers/specs/2026-05-08-festivalmgr-platform-foundation-design.md](../specs/2026-05-08-festivalmgr-platform-foundation-design.md)
 
-**Out of scope (deferred to Plan B / Plan C):** layered firestore.rules + tests; staging/prod GitHub Actions; Netlify production config; daily Firestore backup. This plan ships permissive starter rules used only against emulators.
+**Out of scope (deferred to Plan B / Plan C):**
+- Layered `firestore.rules.frag` composition + emulator rules tests (Plan B).
+- Staging / prod GitHub Actions, Netlify production config, daily Firestore backups (Plan C).
+- The `Artists`, `Schedule`, `Booking`, `Riders`, `Budget` module layers — separate brainstorm/spec/plan cycles each.
+- Public share-links and the public crowd-API mirror (deferred per spec §15).
+
+This plan ships **permissive starter rules** (auth required only) used only against emulators and a hand-seeded staging project. Plan B replaces them with the per-collection role rules and the rules-test suite.
 
 ---
 
@@ -20,190 +26,140 @@
 festivalmgr/
 ├── package.json
 ├── pnpm-workspace.yaml
-├── nuxt.config.ts
-├── app.vue
-├── tsconfig.json
-├── vitest.config.ts
-├── firebase.json
-├── .firebaserc
-├── firestore.rules                       (permissive starter — auth required only)
-├── firestore.indexes.json                (empty for now)
-├── storage.rules                         (permissive starter)
-├── netlify.toml                          (dev-only config; prod settings in Plan C)
+├── tsconfig.json                            (single root tsconfig — Nuxt 4)
+├── nuxt.config.ts                           (top-level — auto-loads ~~/layers/*)
+├── .gitignore
+├── .nvmrc
+├── README.md
+├── firebase.json                            (emulator + deploy targets)
+├── .firebaserc                              (project aliases)
+├── firestore.rules                          (permissive starter — auth required only)
+├── firestore.indexes.json                   (empty array; populated as queries appear)
+├── storage.rules                            (permissive starter — auth required only)
+├── vitest.config.ts                         (root vitest for composable unit tests)
+├── app/
+│   ├── app.vue                              (wraps <UApp><NuxtPage /></UApp>)
+│   └── assets/css/main.css                  (Tailwind v4 + Nuxt UI imports)
 ├── i18n/
-│   └── en.json
+│   └── locales/en.json
 ├── functions/
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── vitest.config.ts
 │   └── src/
-│       ├── index.ts
+│       ├── index.ts                         (re-exports module functions)
 │       ├── core/
-│       │   ├── helpers.ts
-│       │   ├── setMembership.ts
-│       │   ├── revokeMembership.ts
-│       │   └── onUserCreated.ts
+│       │   ├── helpers.ts                   (assertCallerHasRole, etc.)
+│       │   ├── setMembership.ts             (callable: director invites)
+│       │   ├── revokeMembership.ts          (callable: director revokes)
+│       │   └── claimMembership.ts           (callable: invitee activates pending invites)
 │       └── test/
 │           ├── setup.ts
 │           ├── setMembership.test.ts
 │           ├── revokeMembership.test.ts
-│           └── onUserCreated.test.ts
+│           └── claimMembership.test.ts
 ├── layers/
 │   └── core/
-│       ├── nuxt.config.ts
-│       ├── types/
-│       │   ├── index.ts
-│       │   ├── user.ts
-│       │   ├── organization.ts
-│       │   ├── membership.ts
-│       │   ├── event.ts
-│       │   └── location.ts
-│       ├── plugins/
-│       │   └── firebase.client.ts
-│       ├── composables/
-│       │   ├── useFirebase.ts
-│       │   ├── useUser.ts
-│       │   ├── useOrg.ts
-│       │   ├── useMembership.ts
-│       │   ├── useEvent.ts
-│       │   └── useLocation.ts
-│       ├── middleware/
-│       │   └── auth.global.ts
-│       ├── components/
-│       │   ├── AppShell.vue
-│       │   ├── MemberRow.vue
-│       │   ├── EventCard.vue
-│       │   └── LocationListItem.vue
-│       └── pages/
-│           ├── index.vue
-│           ├── login.vue
-│           ├── auth/
-│           │   └── complete.vue
-│           ├── settings/
-│           │   ├── index.vue
-│           │   └── members.vue
-│           └── events/
-│               ├── index.vue
-│               └── [id].vue
+│       ├── nuxt.config.ts                   (layer config — currently a stub)
+│       ├── app/
+│       │   ├── components/
+│       │   │   ├── AppShell.vue
+│       │   │   ├── MemberRow.vue
+│       │   │   ├── EventCard.vue
+│       │   │   └── LocationListItem.vue
+│       │   ├── composables/
+│       │   │   ├── useFunctions.ts          (typed wrapper over Firebase Functions client)
+│       │   │   ├── useUserProfile.ts        (current user's /users/{uid} doc)
+│       │   │   ├── useOrg.ts                (current org from claim)
+│       │   │   ├── useMemberships.ts        (memberships for current org)
+│       │   │   ├── useEvent.ts              (single event)
+│       │   │   ├── useEvents.ts             (event list for current org)
+│       │   │   └── useLocations.ts          (locations for an event)
+│       │   ├── middleware/
+│       │   │   └── auth.global.ts           (route guard — sign-in required)
+│       │   ├── pages/
+│       │   │   ├── index.vue                (dashboard placeholder)
+│       │   │   ├── login.vue
+│       │   │   ├── auth/complete.vue        (magic-link callback)
+│       │   │   ├── settings/
+│       │   │   │   ├── index.vue            (org settings)
+│       │   │   │   └── members.vue          (member admin)
+│       │   │   └── events/
+│       │   │       ├── index.vue            (event list)
+│       │   │       └── [eventId].vue        (event detail + locations)
+│       │   └── plugins/
+│       │       └── claim-membership.client.ts  (post-sign-in claim activation)
+│       └── shared/
+│           └── types/
+│               ├── index.ts
+│               ├── user.ts
+│               ├── organization.ts
+│               ├── membership.ts
+│               ├── event.ts
+│               └── location.ts
 ├── scripts/
-│   └── seed-director.ts
+│   ├── seed-director.ts                     (creates first org + director user)
+│   └── seed-emulator.ts                     (resets emulator + reseeds for dev)
 └── tests/
     └── composables/
-        ├── useUser.test.ts
+        ├── useUserProfile.test.ts
         ├── useOrg.test.ts
-        ├── useMembership.test.ts
-        ├── useEvent.test.ts
-        └── useLocation.test.ts
+        ├── useEvents.test.ts
+        └── useLocations.test.ts
 ```
+
+**Naming notes:**
+- Composables that return a single doc are singular (`useEvent`, `useOrg`); list composables are plural (`useEvents`, `useLocations`).
+- VueFire's primitives (`useFirestore`, `useDocument`, `useCollection`, `useCurrentUser`) are used directly inside our app composables; they are **not** re-wrapped 1:1.
 
 ---
 
-## Task 1: Initialize Nuxt 3 project with Nuxt UI
+## Task 1: Repository scaffold (workspace, tsconfig, gitignore)
 
 **Files:**
-- Create: `package.json`, `pnpm-workspace.yaml`, `nuxt.config.ts`, `app.vue`, `tsconfig.json`, `.gitignore`
-- Create: `i18n/en.json`
+- Create: `package.json`, `pnpm-workspace.yaml`, `tsconfig.json`, `.gitignore`, `.nvmrc`, `README.md`
 
-- [ ] **Step 1: Init project with pnpm and install Nuxt + Nuxt UI**
-
-```bash
-cd /Users/chdabre/dev/festivalmgr
-pnpm init
-pnpm add nuxt @nuxt/ui vue vue-router
-pnpm add -D typescript @types/node vitest @vitejs/plugin-vue happy-dom
-```
-
-- [ ] **Step 2: Write `pnpm-workspace.yaml` to declare the functions sub-package**
+- [ ] **Step 1: Create `pnpm-workspace.yaml`**
 
 ```yaml
 packages:
-  - '.'
-  - 'functions'
+  - .
+  - functions
 ```
 
-- [ ] **Step 3: Write minimal `nuxt.config.ts`**
-
-```ts
-export default defineNuxtConfig({
-  modules: ['@nuxt/ui', '@nuxtjs/i18n'],
-  extends: ['./layers/core'],
-  i18n: {
-    defaultLocale: 'en',
-    locales: [{ code: 'en', file: 'en.json' }],
-    langDir: 'i18n',
-  },
-  typescript: { strict: true },
-  ssr: false, // SPA-mode for the auth-protected app; public pages opt back in later
-  compatibilityDate: '2026-05-08',
-})
-```
-
-- [ ] **Step 4: Add `@nuxtjs/i18n` dependency**
-
-```bash
-pnpm add @nuxtjs/i18n
-```
-
-- [ ] **Step 5: Write `app.vue` shell**
-
-```vue
-<template>
-  <UApp>
-    <NuxtPage />
-  </UApp>
-</template>
-```
-
-- [ ] **Step 6: Write `i18n/en.json` with the strings used by login + member admin pages**
+- [ ] **Step 2: Create `package.json`**
 
 ```json
 {
-  "auth": {
-    "loginTitle": "Sign in to festivalmgr",
-    "magicLinkLabel": "Email",
-    "magicLinkSubmit": "Send magic link",
-    "magicLinkSent": "Check your inbox for a sign-in link.",
-    "googleSubmit": "Continue with Google",
-    "completing": "Completing sign-in…",
-    "logout": "Sign out"
+  "name": "festivalmgr",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n nuxt,emu \"nuxt dev\" \"firebase emulators:start --import=./.emulator-data --export-on-exit\"",
+    "dev:seed": "tsx scripts/seed-emulator.ts",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck && pnpm --filter ./functions typecheck",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:functions": "pnpm --filter ./functions test",
+    "seed:director": "tsx scripts/seed-director.ts"
   },
-  "members": {
-    "title": "Members",
-    "inviteHeading": "Invite a teammate",
-    "emailLabel": "Email",
-    "roleLabel": "Role",
-    "inviteSubmit": "Send invite",
-    "revokeAction": "Revoke",
-    "pending": "Pending",
-    "active": "Active",
-    "revoked": "Revoked"
-  },
-  "events": {
-    "title": "Events",
-    "createButton": "New event",
-    "nameLabel": "Name",
-    "slugLabel": "URL slug",
-    "startLabel": "Start date",
-    "endLabel": "End date",
-    "save": "Save"
-  },
-  "locations": {
-    "title": "Locations",
-    "createButton": "Add location",
-    "nameLabel": "Name",
-    "capacityLabel": "Capacity",
-    "save": "Save",
-    "delete": "Delete"
-  },
-  "settings": {
-    "orgTitle": "Organization settings",
-    "orgNameLabel": "Organization name",
-    "save": "Save"
+  "devDependencies": {
+    "@nuxt/eslint": "^1.0.0",
+    "concurrently": "^9.0.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }
 ```
 
-- [ ] **Step 7: Write `tsconfig.json`**
+- [ ] **Step 3: Create root `tsconfig.json`**
+
+Nuxt 4 generates per-context tsconfigs internally; the root file just extends Nuxt's.
 
 ```json
 {
@@ -211,55 +167,201 @@ pnpm add @nuxtjs/i18n
 }
 ```
 
-- [ ] **Step 8: Write `.gitignore`**
+- [ ] **Step 4: Create `.gitignore`**
 
-```
+```gitignore
 node_modules
 .nuxt
 .output
-.netlify
-.firebase
-*.log
+.data
+dist
 .env
 .env.*
 !.env.example
-firebase-debug.log
-ui-debug.log
-firestore-debug.log
 .DS_Store
+.emulator-data/
+firebase-debug.log
+firestore-debug.log
+storage-debug.log
+ui-debug.log
+service-account*.json
+.netlify
 coverage
-dist
 ```
 
-- [ ] **Step 9: Verify Nuxt boots**
+- [ ] **Step 5: Create `.nvmrc`**
 
-```bash
-pnpm exec nuxt prepare
 ```
-Expected: completes without errors; creates `.nuxt/` directory.
+22
+```
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 6: Create stub `README.md`** (filled in Task 31)
+
+```markdown
+# festivalmgr
+
+See `docs/superpowers/specs/2026-05-08-festivalmgr-platform-foundation-design.md` for the architecture.
+
+Dev onboarding instructions land in this README at the end of Plan A.
+```
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add package.json pnpm-workspace.yaml pnpm-lock.yaml nuxt.config.ts app.vue tsconfig.json .gitignore i18n/
-git commit -m "chore: initialize Nuxt 3 + Nuxt UI project"
+git add .
+git commit -m "chore: scaffold pnpm workspace + root tooling"
 ```
 
 ---
 
-## Task 2: Configure Firebase + emulator with permissive starter rules
+## Task 2: Nuxt 4 install + minimal app entry
 
 **Files:**
-- Create: `firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`, `storage.rules`, `netlify.toml`
+- Modify: `package.json` (add nuxt + @nuxtjs/i18n deps)
+- Create: `nuxt.config.ts`, `app/app.vue`, `i18n/locales/en.json`
 
-- [ ] **Step 1: Install Firebase CLI globally if missing**
+- [ ] **Step 1: Install Nuxt 4 + i18n**
 
 ```bash
-which firebase || pnpm add -g firebase-tools
-firebase --version
+pnpm add -D nuxt@^4.0.0
+pnpm add -D @nuxtjs/i18n
 ```
 
-- [ ] **Step 2: Write `.firebaserc` with project aliases**
+- [ ] **Step 2: Create root `nuxt.config.ts`**
+
+Layers under `~~/layers/*` are auto-registered — no `extends:` needed.
+
+```ts
+export default defineNuxtConfig({
+  compatibilityDate: '2026-01-01',
+  devtools: { enabled: true },
+  modules: [
+    '@nuxtjs/i18n',
+  ],
+  css: ['~/assets/css/main.css'],
+  i18n: {
+    defaultLocale: 'en',
+    locales: [
+      { code: 'en', file: 'en.json' },
+    ],
+    strategy: 'no_prefix',
+  },
+})
+```
+
+- [ ] **Step 3: Create `app/app.vue`**
+
+```vue
+<template>
+  <UApp>
+    <NuxtLayout>
+      <NuxtPage />
+    </NuxtLayout>
+  </UApp>
+</template>
+```
+
+- [ ] **Step 4: Stub `i18n/locales/en.json`**
+
+```json
+{
+  "app": {
+    "title": "festivalmgr"
+  },
+  "auth": {
+    "loginTitle": "Sign in to festivalmgr",
+    "magicLinkLabel": "Send sign-in link",
+    "googleLabel": "Continue with Google",
+    "emailPlaceholder": "you@example.com"
+  },
+  "nav": {
+    "events": "Events",
+    "members": "Members",
+    "settings": "Settings",
+    "signOut": "Sign out"
+  }
+}
+```
+
+- [ ] **Step 5: Run `pnpm nuxt prepare` to verify config compiles**
+
+```bash
+pnpm nuxt prepare
+```
+
+Expected: completes without error and creates `.nuxt/` directory.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .
+git commit -m "feat: add Nuxt 4 baseline + i18n stub"
+```
+
+---
+
+## Task 3: Nuxt UI v4 + Tailwind CSS v4
+
+**Files:**
+- Modify: `package.json`, `nuxt.config.ts`
+- Create: `app/assets/css/main.css`
+
+- [ ] **Step 1: Install Nuxt UI + Tailwind**
+
+```bash
+pnpm add @nuxt/ui tailwindcss
+```
+
+Note: Nuxt UI registers `@nuxt/icon`, `@nuxt/fonts`, and `@nuxtjs/color-mode` automatically — do not list them in `modules`.
+
+- [ ] **Step 2: Update `nuxt.config.ts` modules**
+
+```ts
+modules: [
+  '@nuxt/ui',
+  '@nuxtjs/i18n',
+],
+```
+
+- [ ] **Step 3: Create `app/assets/css/main.css`**
+
+```css
+@import "tailwindcss";
+@import "@nuxt/ui";
+```
+
+- [ ] **Step 4: Verify the dev server boots**
+
+```bash
+pnpm nuxt prepare
+pnpm nuxt dev
+```
+
+Expected: Nuxt dev server starts, the placeholder page renders without console errors. Stop the server.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .
+git commit -m "feat: wire Nuxt UI v4 + Tailwind CSS v4"
+```
+
+---
+
+## Task 4: Firebase project config + emulator declaration
+
+**Files:**
+- Create: `firebase.json`, `.firebaserc`, `firestore.indexes.json`
+
+- [ ] **Step 1: Install Firebase CLI as a dev dep**
+
+```bash
+pnpm add -D firebase-tools
+```
+
+- [ ] **Step 2: Create `.firebaserc`**
+
+Project IDs are placeholders the developer customises before deploying. The `dev` alias is for emulator-only — never deployed to.
 
 ```json
 {
@@ -272,9 +374,7 @@ firebase --version
 }
 ```
 
-> Real Firebase projects for staging/prod are created in Plan C. For Plan A, `festivalmgr-dev` is a placeholder ID — we never deploy to it; the emulator uses it only for local config consistency.
-
-- [ ] **Step 3: Write `firebase.json`**
+- [ ] **Step 3: Create `firebase.json`**
 
 ```json
 {
@@ -285,10 +385,14 @@ firebase --version
   "storage": {
     "rules": "storage.rules"
   },
-  "functions": {
-    "source": "functions",
-    "predeploy": ["pnpm --filter functions build"]
-  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": ["node_modules", ".git", "*.log", "test"],
+      "predeploy": ["pnpm --filter ./functions build"]
+    }
+  ],
   "emulators": {
     "auth":      { "port": 9099 },
     "firestore": { "port": 8080 },
@@ -300,7 +404,7 @@ firebase --version
 }
 ```
 
-- [ ] **Step 4: Write `firestore.indexes.json` (empty starter)**
+- [ ] **Step 4: Create empty `firestore.indexes.json`**
 
 ```json
 {
@@ -309,12 +413,39 @@ firebase --version
 }
 ```
 
-- [ ] **Step 5: Write permissive starter `firestore.rules`**
+- [ ] **Step 5: Verify emulator boots**
 
-> These rules require auth but otherwise allow any authenticated user to read/write anything. Plan B replaces these with locked-down per-collection rules. They exist only so the app works against the emulator during Plan A development.
+```bash
+pnpm exec firebase emulators:start --project festivalmgr-dev --only auth,firestore,storage
+```
 
-```js
+Expected: emulator UI becomes available at http://127.0.0.1:4000. Stop it (Ctrl+C).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .
+git commit -m "feat: add Firebase project config + emulator suite"
+```
+
+---
+
+## Task 5: Permissive starter Firestore + Storage rules
+
+**Files:**
+- Create: `firestore.rules`, `storage.rules`
+
+These are intentionally permissive: any signed-in user can read/write everything in the project. Plan B replaces them with the layered, role-aware rules and the rules-test suite. Until then, **do not deploy Plan A to staging or prod.**
+
+- [ ] **Step 1: Create `firestore.rules`**
+
+```javascript
+// PERMISSIVE STARTER RULES — Plan A only.
+// Plan B replaces this with the layered, role-aware rule set + emulator rules tests.
+// DO NOT DEPLOY THIS FILE BEYOND THE LOCAL EMULATOR.
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {
@@ -324,10 +455,15 @@ service cloud.firestore {
 }
 ```
 
-- [ ] **Step 6: Write permissive starter `storage.rules`**
+- [ ] **Step 2: Create `storage.rules`**
 
-```js
+```javascript
+// PERMISSIVE STARTER RULES — Plan A only.
+// Plan B replaces this with the layered, role-aware rule set + emulator rules tests.
+// DO NOT DEPLOY THIS FILE BEYOND THE LOCAL EMULATOR.
+
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
     match /{allPaths=**} {
@@ -337,75 +473,145 @@ service firebase.storage {
 }
 ```
 
-- [ ] **Step 7: Write `netlify.toml` (dev-only stub)**
-
-```toml
-[build]
-  command = "pnpm build"
-  publish = ".output/public"
-
-[build.environment]
-  NODE_VERSION = "20"
-```
-
-- [ ] **Step 8: Verify the emulator suite starts**
+- [ ] **Step 3: Commit**
 
 ```bash
-firebase emulators:start --only auth,firestore,storage --project festivalmgr-dev
-```
-Expected: Auth on 9099, Firestore on 8080, Storage on 9199, UI on 4000. Hit `Ctrl+C` to stop after verifying.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add firebase.json .firebaserc firestore.rules firestore.indexes.json storage.rules netlify.toml
-git commit -m "chore: configure firebase emulator suite with permissive starter rules"
+git add .
+git commit -m "feat: add permissive starter Firestore + Storage rules"
 ```
 
 ---
 
-## Task 3: Set up `layers/core` scaffold
+## Task 6: VueFire install + module config + emulator wiring
+
+**Files:**
+- Modify: `package.json`, `nuxt.config.ts`
+- Create: `.env.example`
+
+VueFire (`nuxt-vuefire`) handles client SDK init, SSR-safe composables, Auth integration, and emulator wiring.
+
+- [ ] **Step 1: Install runtime deps**
+
+```bash
+pnpm add nuxt-vuefire firebase
+pnpm add firebase-admin firebase-functions
+```
+
+`firebase-admin` and `firebase-functions` are needed by Functions, but listing them at the workspace root makes it easier to import types in any package; the Functions package re-declares them in its own `package.json` in Task 21.
+
+- [ ] **Step 2: Add `nuxt-vuefire` to `nuxt.config.ts` modules**
+
+```ts
+modules: [
+  '@nuxt/ui',
+  '@nuxtjs/i18n',
+  'nuxt-vuefire',
+],
+```
+
+- [ ] **Step 3: Add `vuefire` config block to `nuxt.config.ts`**
+
+```ts
+vuefire: {
+  config: {
+    apiKey:            process.env.NUXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain:        process.env.NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId:         process.env.NUXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket:     process.env.NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NUXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId:             process.env.NUXT_PUBLIC_FIREBASE_APP_ID,
+  },
+  auth: { enabled: true },
+  emulators: {
+    enabled: process.env.FIREBASE_USE_EMULATOR === '1',
+    auth:      { host: '127.0.0.1', port: 9099 },
+    firestore: { host: '127.0.0.1', port: 8080 },
+    functions: { host: '127.0.0.1', port: 5001 },
+    storage:   { host: '127.0.0.1', port: 9199 },
+  },
+},
+```
+
+- [ ] **Step 4: Create `.env.example`**
+
+```dotenv
+# Set to 1 to point the client SDK at the local Firebase emulators.
+FIREBASE_USE_EMULATOR=1
+
+# Public client config — for emulator dev these can stay as the demo defaults.
+NUXT_PUBLIC_FIREBASE_API_KEY=demo-api-key
+NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=festivalmgr-dev.firebaseapp.com
+NUXT_PUBLIC_FIREBASE_PROJECT_ID=festivalmgr-dev
+NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET=festivalmgr-dev.appspot.com
+NUXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000
+NUXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:demoappid
+```
+
+- [ ] **Step 5: Copy `.env.example` to `.env` and run prepare**
+
+```bash
+cp .env.example .env
+pnpm nuxt prepare
+```
+
+Expected: `.nuxt/` regenerates without errors and `nuxt-vuefire` types appear in `.nuxt/types/`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .
+git commit -m "feat: wire VueFire + emulator config"
+```
+
+---
+
+## Task 7: `core` Nuxt layer skeleton
 
 **Files:**
 - Create: `layers/core/nuxt.config.ts`
 
-- [ ] **Step 1: Write `layers/core/nuxt.config.ts`**
+Layer auto-registration means we don't add `extends:` to the root config — the `~~/layers/core/` directory is loaded automatically and accessible via `#layers/core`.
+
+- [ ] **Step 1: Create `layers/core/nuxt.config.ts`**
 
 ```ts
 export default defineNuxtConfig({
-  components: [
-    { path: '~/components', pathPrefix: false },
-  ],
+  // Layer-local overrides only. Modules are declared once at the project root.
 })
 ```
+
+The layer is intentionally near-empty for now; module-level config slots in here when later domain layers (Artists, Schedule, etc.) need module-specific component prefixes or per-layer i18n directories.
 
 - [ ] **Step 2: Verify the layer is picked up**
 
 ```bash
-pnpm exec nuxt prepare
+pnpm nuxt prepare
 ```
-Expected: completes without errors; `.nuxt/` regenerated.
+
+Expected: `.nuxt/types/imports.d.ts` lists `#layers/core` alias and any future layer composables.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add layers/core/
-git commit -m "chore: scaffold core nuxt layer"
+git add .
+git commit -m "feat: scaffold core layer"
 ```
 
 ---
 
-## Task 4: Add core domain types
+## Task 8: Shared types — User, Organization, Membership, Event, Location
 
 **Files:**
-- Create: `layers/core/types/user.ts`, `organization.ts`, `membership.ts`, `event.ts`, `location.ts`, `index.ts`
+- Create: `layers/core/shared/types/index.ts`, `user.ts`, `organization.ts`, `membership.ts`, `event.ts`, `location.ts`
 
-- [ ] **Step 1: Write `layers/core/types/user.ts`**
+Types live under `shared/` so they're importable from both the Nuxt app and the Functions package (Functions imports them via a relative path; Nuxt auto-imports from `shared/`).
+
+- [ ] **Step 1: Create `layers/core/shared/types/user.ts`**
 
 ```ts
 import type { Timestamp } from 'firebase/firestore'
 
-export interface User {
+export type User = {
   email: string
   displayName: string
   photoURL?: string
@@ -414,55 +620,58 @@ export interface User {
 }
 ```
 
-- [ ] **Step 2: Write `layers/core/types/organization.ts`**
+- [ ] **Step 2: Create `layers/core/shared/types/organization.ts`**
 
 ```ts
 import type { Timestamp } from 'firebase/firestore'
 
 export type ModuleKey = 'artists' | 'budget' | 'booking' | 'riders' | 'schedule'
 
-export interface Organization {
+export type Organization = {
   name: string
   slug: string
   defaultLocale: string
   defaultCurrency: string
   enabledModules: ModuleKey[]
-  branding?: { logoStoragePath?: string; primaryColor?: string }
+  branding?: {
+    logoStoragePath?: string
+    primaryColor?: string
+  }
   createdAt: Timestamp
 }
 ```
 
-- [ ] **Step 3: Write `layers/core/types/membership.ts`**
+- [ ] **Step 3: Create `layers/core/shared/types/membership.ts`**
 
 ```ts
 import type { Timestamp } from 'firebase/firestore'
 
 export type Role = 'director' | 'booker' | 'production' | 'finance' | 'pr' | 'crew'
-export type MembershipStatus = 'pending' | 'active' | 'revoked'
 
-export interface Membership {
-  userId: string
+export type Membership = {
+  userId: string | null
+  email: string
   role: Role
   invitedBy: string
   invitedAt: Timestamp
-  acceptedAt?: Timestamp
-  status: MembershipStatus
+  acceptedAt: Timestamp | null
+  status: 'pending' | 'active' | 'revoked'
 }
 ```
 
-- [ ] **Step 4: Write `layers/core/types/event.ts`**
+`userId` is nullable while a membership is `pending` (the invite was sent by email but the invitee hasn't signed in yet).
+
+- [ ] **Step 4: Create `layers/core/shared/types/event.ts`**
 
 ```ts
 import type { Timestamp } from 'firebase/firestore'
 
-export type EventStatus = 'planning' | 'live' | 'archived'
-
-export interface Event {
+export type Event = {
   name: string
   slug: string
   primaryLocale: string
   primaryContacts: string[]
-  status: EventStatus
+  status: 'planning' | 'live' | 'archived'
   dates: { start: Timestamp; end: Timestamp }
   publicSlug?: string
   publishToPublic: boolean
@@ -471,10 +680,10 @@ export interface Event {
 }
 ```
 
-- [ ] **Step 5: Write `layers/core/types/location.ts`**
+- [ ] **Step 5: Create `layers/core/shared/types/location.ts`**
 
 ```ts
-export interface Location {
+export type Location = {
   name: string
   capacity?: number
   notes?: string
@@ -482,7 +691,7 @@ export interface Location {
 }
 ```
 
-- [ ] **Step 6: Write `layers/core/types/index.ts` re-export barrel**
+- [ ] **Step 6: Create `layers/core/shared/types/index.ts`**
 
 ```ts
 export * from './user'
@@ -492,1361 +701,615 @@ export * from './event'
 export * from './location'
 ```
 
-- [ ] **Step 7: Install Firebase JS SDK so `Timestamp` resolves**
+- [ ] **Step 7: Commit**
 
 ```bash
-pnpm add firebase
-```
-
-- [ ] **Step 8: Verify types compile**
-
-```bash
-pnpm exec nuxt prepare && pnpm exec tsc --noEmit
-```
-Expected: no errors.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add layers/core/types/ package.json pnpm-lock.yaml
-git commit -m "feat(core): add core domain types"
+git add .
+git commit -m "feat: add core shared types"
 ```
 
 ---
 
-## Task 5: Add Firebase client plugin (auth + firestore + functions, emulator-aware)
+## Task 9: Vitest config + test helpers
 
 **Files:**
-- Create: `layers/core/plugins/firebase.client.ts`
+- Create: `vitest.config.ts`, `tests/helpers/firestore-mock.ts`
 
-- [ ] **Step 1: Write the client-only plugin**
+We use Vitest with a tiny in-memory mock of VueFire's composables for unit-testing app composables. Firestore SDK is **not** mocked deeply — composable tests assert orchestration only; integration coverage comes from the rules tests in Plan B.
+
+- [ ] **Step 1: Create `vitest.config.ts`**
 
 ```ts
-// layers/core/plugins/firebase.client.ts
-import { initializeApp } from 'firebase/app'
-import { getAuth, connectAuthEmulator } from 'firebase/auth'
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
-import { getStorage, connectStorageEmulator } from 'firebase/storage'
+import { defineConfig } from 'vitest/config'
+import { fileURLToPath, URL } from 'node:url'
 
-export default defineNuxtPlugin(() => {
-  const config = useRuntimeConfig().public.firebase
-  const app = initializeApp(config)
-
-  const auth = getAuth(app)
-  const db = getFirestore(app)
-  const functions = getFunctions(app)
-  const storage = getStorage(app)
-
-  if (import.meta.env.DEV || useRuntimeConfig().public.useEmulator) {
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
-    connectFirestoreEmulator(db, '127.0.0.1', 8080)
-    connectFunctionsEmulator(functions, '127.0.0.1', 5001)
-    connectStorageEmulator(storage, '127.0.0.1', 9199)
-  }
-
-  return { provide: { firebase: { app, auth, db, functions, storage } } }
+export default defineConfig({
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+    include: ['tests/**/*.test.ts'],
+  },
+  resolve: {
+    alias: {
+      '#layers/core': fileURLToPath(new URL('./layers/core', import.meta.url)),
+    },
+  },
 })
 ```
 
-- [ ] **Step 2: Wire up runtime config in `nuxt.config.ts`**
-
-Modify the existing `nuxt.config.ts` to add:
-
-```ts
-runtimeConfig: {
-  public: {
-    useEmulator: process.env.FIREBASE_USE_EMULATOR === '1',
-    firebase: {
-      apiKey: process.env.FIREBASE_API_KEY ?? 'demo-api-key',
-      authDomain: process.env.FIREBASE_AUTH_DOMAIN ?? 'localhost',
-      projectId: process.env.FIREBASE_PROJECT_ID ?? 'festivalmgr-dev',
-      storageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? 'demo-bucket',
-      appId: process.env.FIREBASE_APP_ID ?? 'demo-app',
-    },
-  },
-},
-```
-
-- [ ] **Step 3: Add `.env.example`**
-
-```
-FIREBASE_USE_EMULATOR=1
-FIREBASE_PROJECT_ID=festivalmgr-dev
-FIREBASE_API_KEY=demo-api-key
-FIREBASE_AUTH_DOMAIN=localhost
-FIREBASE_STORAGE_BUCKET=demo-bucket
-FIREBASE_APP_ID=demo-app
-```
-
-- [ ] **Step 4: Verify the plugin compiles**
+- [ ] **Step 2: Install test deps**
 
 ```bash
-pnpm exec nuxt prepare && pnpm exec tsc --noEmit
+pnpm add -D happy-dom @vue/test-utils
 ```
-Expected: no errors.
+
+- [ ] **Step 3: Create `tests/helpers/firestore-mock.ts`**
+
+```ts
+import { ref } from 'vue'
+import { vi } from 'vitest'
+
+export function mockUseDocument<T>(initial: T | null = null) {
+  const data = ref<T | null>(initial)
+  const fn = vi.fn(() => data)
+  return { data, fn }
+}
+
+export function mockUseCollection<T>(initial: T[] = []) {
+  const data = ref<T[]>(initial)
+  const fn = vi.fn(() => data)
+  return { data, fn }
+}
+```
+
+- [ ] **Step 4: Sanity-check Vitest is wired**
+
+```bash
+pnpm test
+```
+
+Expected: "No test files found" (exit code 1 is OK for now).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add layers/core/plugins/firebase.client.ts nuxt.config.ts .env.example
-git commit -m "feat(core): add firebase client plugin with emulator support"
+git add .
+git commit -m "chore: add vitest + firestore mock helpers"
 ```
 
 ---
 
-## Task 6: Add `useUser` composable + tests
+## Task 10: `useUserProfile` composable + tests
 
 **Files:**
-- Create: `layers/core/composables/useFirebase.ts`, `useUser.ts`
-- Create: `vitest.config.ts`, `tests/composables/useUser.test.ts`
+- Create: `layers/core/app/composables/useUserProfile.ts`
+- Create: `tests/composables/useUserProfile.test.ts`
 
-- [ ] **Step 1: Write `vitest.config.ts`**
+`useUserProfile` returns the current user's `/users/{uid}` doc reactively. It composes VueFire's `useCurrentUser` (Firebase Auth) with `useDocument` (Firestore).
 
-```ts
-import { defineConfig } from 'vitest/config'
-import vue from '@vitejs/plugin-vue'
-
-export default defineConfig({
-  plugins: [vue()],
-  test: {
-    environment: 'happy-dom',
-    globals: true,
-    setupFiles: [],
-  },
-})
-```
-
-- [ ] **Step 2: Write the `useFirebase` helper**
+- [ ] **Step 1: Write the failing test**
 
 ```ts
-// layers/core/composables/useFirebase.ts
-export const useFirebase = () => {
-  const { $firebase } = useNuxtApp()
-  return $firebase
-}
-```
-
-- [ ] **Step 3: Write the failing test for `useUser`**
-
-```ts
-// tests/composables/useUser.test.ts
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+// tests/composables/useUserProfile.test.ts
+import { describe, it, expect, vi } from 'vitest'
 import { ref } from 'vue'
 
-const mockOnAuthStateChanged = vi.fn()
-const mockSignOut = vi.fn()
-
-vi.mock('firebase/auth', () => ({
-  onAuthStateChanged: mockOnAuthStateChanged,
-  signOut: mockSignOut,
+vi.mock('vuefire', () => ({
+  useCurrentUser: () => ref({ uid: 'u1' }),
+  useFirestore: () => ({}),
+  useDocument: vi.fn(() => ref({ email: 'a@b.c', displayName: 'A', orgIds: ['lila'] })),
+}))
+vi.mock('firebase/firestore', () => ({
+  doc: (..._args: unknown[]) => ({ path: 'users/u1' }),
 }))
 
-vi.mock('#imports', () => ({
-  useFirebase: () => ({ auth: { currentUser: null } }),
-  useState: <T>(_k: string, init: () => T) => ref(init()),
-}))
+import { useUserProfile } from '#layers/core/app/composables/useUserProfile'
 
-describe('useUser', () => {
-  beforeEach(() => { vi.clearAllMocks() })
-
-  it('exposes the current Firebase user as a ref', async () => {
-    const { useUser } = await import('../../layers/core/composables/useUser')
-    const { user } = useUser()
-    expect(user.value).toBeNull()
-  })
-
-  it('updates the ref when onAuthStateChanged fires', async () => {
-    let registered: (u: unknown) => void = () => {}
-    mockOnAuthStateChanged.mockImplementation((_auth, cb) => { registered = cb; return () => {} })
-    const { useUser } = await import('../../layers/core/composables/useUser')
-    const { user } = useUser()
-    registered({ uid: 'abc', email: 'sarah@example.com' })
-    expect(user.value).toEqual({ uid: 'abc', email: 'sarah@example.com' })
-  })
-
-  it('signOut delegates to firebase/auth.signOut', async () => {
-    const { useUser } = await import('../../layers/core/composables/useUser')
-    const { signOut } = useUser()
-    await signOut()
-    expect(mockSignOut).toHaveBeenCalled()
+describe('useUserProfile', () => {
+  it('returns the current user profile reactively', () => {
+    const profile = useUserProfile()
+    expect(profile.value).toEqual({ email: 'a@b.c', displayName: 'A', orgIds: ['lila'] })
   })
 })
 ```
 
-- [ ] **Step 4: Run test to verify it fails (composable does not exist)**
+- [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm exec vitest run tests/composables/useUser.test.ts
+pnpm test
 ```
-Expected: FAIL — "Cannot find module '../../layers/core/composables/useUser'".
 
-- [ ] **Step 5: Write `useUser` composable to make tests pass**
+Expected: FAIL — module not found for `useUserProfile`.
+
+- [ ] **Step 3: Implement `useUserProfile`**
 
 ```ts
-// layers/core/composables/useUser.ts
-import { onAuthStateChanged, signOut as fbSignOut, type User as FbUser } from 'firebase/auth'
+// layers/core/app/composables/useUserProfile.ts
+import { computed } from 'vue'
+import { useCurrentUser, useDocument, useFirestore } from 'vuefire'
+import { doc } from 'firebase/firestore'
+import type { User } from '#layers/core/shared/types'
 
-export const useUser = () => {
-  const { auth } = useFirebase()
-  const user = useState<FbUser | null>('fbUser', () => auth.currentUser)
-
-  if (import.meta.client) {
-    onAuthStateChanged(auth, (u) => { user.value = u })
-  }
-
-  const signOut = () => fbSignOut(auth)
-  return { user, signOut }
+export function useUserProfile() {
+  const auth = useCurrentUser()
+  const db = useFirestore()
+  const profile = computed(() => {
+    if (!auth.value) return null
+    return useDocument<User>(doc(db, 'users', auth.value.uid))
+  })
+  return computed(() => profile.value?.value ?? null)
 }
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-pnpm exec vitest run tests/composables/useUser.test.ts
-```
-Expected: 3 passed.
-
-- [ ] **Step 7: Add npm test script to `package.json`**
-
-Modify `package.json` to add:
-
-```json
-"scripts": {
-  "test": "vitest run",
-  "test:watch": "vitest"
-}
+pnpm test tests/composables/useUserProfile.test.ts
 ```
 
-- [ ] **Step 8: Commit**
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add layers/core/composables/ tests/ vitest.config.ts package.json
-git commit -m "feat(core): add useUser composable"
+git add .
+git commit -m "feat(core): add useUserProfile composable"
 ```
 
 ---
 
-## Task 7: Add `useOrg` and `useMembership` composables + tests
+## Task 11: `useOrg` composable + tests
 
 **Files:**
-- Create: `layers/core/composables/useOrg.ts`, `useMembership.ts`
-- Create: `tests/composables/useOrg.test.ts`, `useMembership.test.ts`
+- Create: `layers/core/app/composables/useOrg.ts`
+- Create: `tests/composables/useOrg.test.ts`
 
-- [ ] **Step 1: Write the failing test for `useOrg`**
+`useOrg` reads the active `orgId` and `role` from the user's ID-token claims, then returns the corresponding `/organizations/{orgId}` doc.
+
+- [ ] **Step 1: Write the failing test**
 
 ```ts
 // tests/composables/useOrg.test.ts
 import { describe, it, expect, vi } from 'vitest'
+import { ref } from 'vue'
 
-const mockDoc = vi.fn()
-const mockOnSnapshot = vi.fn()
+const idTokenResult = { claims: { orgId: 'lila', role: 'director' } }
+
+vi.mock('vuefire', () => ({
+  useCurrentUser: () => ref({
+    uid: 'u1',
+    getIdTokenResult: vi.fn(async () => idTokenResult),
+  }),
+  useFirestore: () => ({}),
+  useDocument: vi.fn(() => ref({ name: 'lila. queer festival e.V.', slug: 'lila' })),
+}))
 vi.mock('firebase/firestore', () => ({
-  doc: (...a: unknown[]) => mockDoc(...a),
-  onSnapshot: (...a: unknown[]) => mockOnSnapshot(...a),
+  doc: (..._args: unknown[]) => ({ path: 'organizations/lila' }),
 }))
-vi.mock('#imports', () => ({
-  useFirebase: () => ({ db: { __db: true } }),
-  useState: <T>(_k: string, init: () => T) => ({ value: init() }),
-  useNuxtApp: () => ({ $firebase: { db: { __db: true } } }),
-}))
+
+import { useOrg } from '#layers/core/app/composables/useOrg'
 
 describe('useOrg', () => {
-  it('subscribes to /organizations/{orgId} and exposes ref', async () => {
-    let snapHandler: (s: { exists: () => boolean; data: () => unknown }) => void = () => {}
-    mockOnSnapshot.mockImplementation((_ref, cb) => { snapHandler = cb; return () => {} })
-    mockDoc.mockReturnValue({ __ref: true })
-
-    const { useOrg } = await import('../../layers/core/composables/useOrg')
-    const { org, subscribe } = useOrg('lila')
-    subscribe()
-    snapHandler({ exists: () => true, data: () => ({ name: 'lila e.V.' }) })
-    expect(org.value).toEqual({ name: 'lila e.V.' })
+  it('returns the current org doc derived from the user claim', async () => {
+    const { org, role, orgId } = await useOrg()
+    expect(orgId.value).toBe('lila')
+    expect(role.value).toBe('director')
+    expect(org.value).toMatchObject({ name: 'lila. queer festival e.V.' })
   })
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm exec vitest run tests/composables/useOrg.test.ts
+pnpm test tests/composables/useOrg.test.ts
 ```
+
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write `useOrg` composable**
+- [ ] **Step 3: Implement `useOrg`**
 
 ```ts
-// layers/core/composables/useOrg.ts
-import { doc, onSnapshot } from 'firebase/firestore'
-import type { Organization } from '../types'
+// layers/core/app/composables/useOrg.ts
+import { ref, computed, watch } from 'vue'
+import { useCurrentUser, useDocument, useFirestore } from 'vuefire'
+import { doc } from 'firebase/firestore'
+import type { Organization, Role } from '#layers/core/shared/types'
 
-export const useOrg = (orgId: string) => {
-  const { db } = useFirebase()
-  const org = useState<Organization | null>(`org:${orgId}`, () => null)
+export async function useOrg() {
+  const user = useCurrentUser()
+  const db = useFirestore()
 
-  const subscribe = () => {
-    const ref = doc(db, 'organizations', orgId)
-    return onSnapshot(ref, (snap) => {
-      org.value = snap.exists() ? (snap.data() as Organization) : null
-    })
-  }
+  const orgId = ref<string | null>(null)
+  const role = ref<Role | null>(null)
 
-  return { org, subscribe }
-}
-```
-
-- [ ] **Step 4: Run test to verify pass**
-
-```bash
-pnpm exec vitest run tests/composables/useOrg.test.ts
-```
-Expected: 1 passed.
-
-- [ ] **Step 5: Write the failing test for `useMembership`**
-
-```ts
-// tests/composables/useMembership.test.ts
-import { describe, it, expect, vi } from 'vitest'
-
-const mockCollection = vi.fn()
-const mockOnSnapshot = vi.fn()
-const mockHttpsCallable = vi.fn(() => vi.fn().mockResolvedValue({ data: { ok: true } }))
-
-vi.mock('firebase/firestore', () => ({
-  collection: (...a: unknown[]) => mockCollection(...a),
-  onSnapshot: (...a: unknown[]) => mockOnSnapshot(...a),
-}))
-vi.mock('firebase/functions', () => ({
-  httpsCallable: (...a: unknown[]) => mockHttpsCallable(...a),
-}))
-vi.mock('#imports', () => ({
-  useFirebase: () => ({ db: {}, functions: {} }),
-  useState: <T>(_k: string, init: () => T) => ({ value: init() }),
-}))
-
-describe('useMembership', () => {
-  it('lists members and reacts to snapshots', async () => {
-    let h: (s: { docs: { id: string; data: () => unknown }[] }) => void = () => {}
-    mockOnSnapshot.mockImplementation((_ref, cb) => { h = cb; return () => {} })
-
-    const { useMembership } = await import('../../layers/core/composables/useMembership')
-    const { members, subscribe } = useMembership('lila')
-    subscribe()
-    h({ docs: [{ id: 'u1', data: () => ({ role: 'director', status: 'active' }) }] })
-    expect(members.value).toEqual([{ id: 'u1', role: 'director', status: 'active' }])
-  })
-
-  it('invite delegates to setMembership callable', async () => {
-    const { useMembership } = await import('../../layers/core/composables/useMembership')
-    const { invite } = useMembership('lila')
-    await invite({ email: 'sarah@example.com', role: 'booker' })
-    expect(mockHttpsCallable).toHaveBeenCalledWith({}, 'setMembership')
-  })
-})
-```
-
-- [ ] **Step 6: Run to verify failure**
-
-```bash
-pnpm exec vitest run tests/composables/useMembership.test.ts
-```
-Expected: FAIL — module not found.
-
-- [ ] **Step 7: Write `useMembership` composable**
-
-```ts
-// layers/core/composables/useMembership.ts
-import { collection, onSnapshot } from 'firebase/firestore'
-import { httpsCallable } from 'firebase/functions'
-import type { Membership, Role } from '../types'
-
-type MemberRow = Membership & { id: string }
-
-export const useMembership = (orgId: string) => {
-  const { db, functions } = useFirebase()
-  const members = useState<MemberRow[]>(`members:${orgId}`, () => [])
-
-  const subscribe = () => {
-    const ref = collection(db, 'organizations', orgId, 'memberships')
-    return onSnapshot(ref, (snap) => {
-      members.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Membership) }))
-    })
-  }
-
-  const invite = (input: { email: string; role: Role }) =>
-    httpsCallable(functions, 'setMembership')({ orgId, ...input })
-
-  const revoke = (userId: string) =>
-    httpsCallable(functions, 'revokeMembership')({ orgId, userId })
-
-  return { members, subscribe, invite, revoke }
-}
-```
-
-- [ ] **Step 8: Run all tests to verify**
-
-```bash
-pnpm exec vitest run tests/composables/
-```
-Expected: all passing.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add layers/core/composables/ tests/composables/
-git commit -m "feat(core): add useOrg and useMembership composables"
-```
-
----
-
-## Task 8: Add `useEvent` and `useLocation` composables + tests
-
-**Files:**
-- Create: `layers/core/composables/useEvent.ts`, `useLocation.ts`
-- Create: `tests/composables/useEvent.test.ts`, `useLocation.test.ts`
-
-- [ ] **Step 1: Write the failing test for `useEvent`**
-
-```ts
-// tests/composables/useEvent.test.ts
-import { describe, it, expect, vi } from 'vitest'
-
-const mockCollection = vi.fn()
-const mockOnSnapshot = vi.fn()
-const mockAddDoc = vi.fn().mockResolvedValue({ id: 'evt1' })
-const mockDoc = vi.fn()
-const mockUpdateDoc = vi.fn().mockResolvedValue(undefined)
-const mockServerTimestamp = vi.fn(() => 'TS')
-
-vi.mock('firebase/firestore', () => ({
-  collection: (...a: unknown[]) => mockCollection(...a),
-  onSnapshot: (...a: unknown[]) => mockOnSnapshot(...a),
-  addDoc: (...a: unknown[]) => mockAddDoc(...a),
-  doc: (...a: unknown[]) => mockDoc(...a),
-  updateDoc: (...a: unknown[]) => mockUpdateDoc(...a),
-  serverTimestamp: () => mockServerTimestamp(),
-  query: (...a: unknown[]) => a,
-  where: (...a: unknown[]) => a,
-  Timestamp: { fromDate: (d: Date) => ({ d }) },
-}))
-vi.mock('#imports', () => ({
-  useFirebase: () => ({ db: {} }),
-  useState: <T>(_k: string, init: () => T) => ({ value: init() }),
-}))
-
-describe('useEvent', () => {
-  it('createEvent calls addDoc with required fields', async () => {
-    const { useEvent } = await import('../../layers/core/composables/useEvent')
-    const { createEvent } = useEvent('lila')
-    await createEvent({ name: 'lila 2025', slug: 'lila-2025', start: new Date('2025-09-04'), end: new Date('2025-09-06') })
-    expect(mockAddDoc).toHaveBeenCalled()
-    const payload = mockAddDoc.mock.calls[0][1]
-    expect(payload).toMatchObject({
-      name: 'lila 2025', slug: 'lila-2025', status: 'planning',
-      publishToPublic: false, deletedAt: null, primaryLocale: 'en',
-    })
-  })
-})
-```
-
-- [ ] **Step 2: Run to verify failure**
-
-```bash
-pnpm exec vitest run tests/composables/useEvent.test.ts
-```
-Expected: FAIL — module not found.
-
-- [ ] **Step 3: Write `useEvent` composable**
-
-```ts
-// layers/core/composables/useEvent.ts
-import {
-  collection, onSnapshot, addDoc, doc, updateDoc, query, where,
-  serverTimestamp, Timestamp,
-} from 'firebase/firestore'
-import type { Event, EventStatus } from '../types'
-
-type EventRow = Event & { id: string }
-
-export const useEvent = (orgId: string) => {
-  const { db } = useFirebase()
-  const events = useState<EventRow[]>(`events:${orgId}`, () => [])
-
-  const subscribe = () => {
-    const ref = query(
-      collection(db, 'organizations', orgId, 'events'),
-      where('deletedAt', '==', null),
-    )
-    return onSnapshot(ref, (snap) => {
-      events.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Event) }))
-    })
-  }
-
-  const createEvent = (input: { name: string; slug: string; start: Date; end: Date }) => {
-    const payload: Omit<Event, never> = {
-      name: input.name,
-      slug: input.slug,
-      primaryLocale: 'en',
-      primaryContacts: [],
-      status: 'planning' as EventStatus,
-      dates: { start: Timestamp.fromDate(input.start), end: Timestamp.fromDate(input.end) },
-      publishToPublic: false,
-      createdAt: serverTimestamp() as never,
-      deletedAt: null,
+  async function refresh() {
+    if (!user.value) {
+      orgId.value = null
+      role.value = null
+      return
     }
-    return addDoc(collection(db, 'organizations', orgId, 'events'), payload)
+    const t = await user.value.getIdTokenResult()
+    orgId.value = (t.claims.orgId as string) ?? null
+    role.value = (t.claims.role as Role) ?? null
   }
 
-  const updateEvent = (eventId: string, patch: Partial<Event>) =>
-    updateDoc(doc(db, 'organizations', orgId, 'events', eventId), patch)
+  await refresh()
+  watch(user, refresh)
 
-  const softDelete = (eventId: string) =>
-    updateDoc(doc(db, 'organizations', orgId, 'events', eventId), { deletedAt: serverTimestamp() })
+  const orgRef = computed(() =>
+    orgId.value ? doc(db, 'organizations', orgId.value) : null,
+  )
+  const org = computed(() =>
+    orgRef.value ? useDocument<Organization>(orgRef.value).value : null,
+  )
 
-  return { events, subscribe, createEvent, updateEvent, softDelete }
+  return { orgId, role, org, refresh }
 }
 ```
 
-- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-pnpm exec vitest run tests/composables/useEvent.test.ts
+pnpm test tests/composables/useOrg.test.ts
 ```
-Expected: 1 passed.
 
-- [ ] **Step 5: Write the failing test for `useLocation`**
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .
+git commit -m "feat(core): add useOrg composable"
+```
+
+---
+
+## Task 12: `useEvents` + `useEvent` composables
+
+**Files:**
+- Create: `layers/core/app/composables/useEvents.ts`
+- Create: `layers/core/app/composables/useEvent.ts`
+- Create: `tests/composables/useEvents.test.ts`
+
+- [ ] **Step 1: Write failing test for `useEvents`**
 
 ```ts
-// tests/composables/useLocation.test.ts
+// tests/composables/useEvents.test.ts
 import { describe, it, expect, vi } from 'vitest'
+import { ref } from 'vue'
 
-const mockCollection = vi.fn()
-const mockOnSnapshot = vi.fn()
-const mockAddDoc = vi.fn().mockResolvedValue({ id: 'loc1' })
-const mockDoc = vi.fn()
-const mockUpdateDoc = vi.fn().mockResolvedValue(undefined)
-const mockDeleteDoc = vi.fn().mockResolvedValue(undefined)
-
+vi.mock('vuefire', () => ({
+  useFirestore: () => ({}),
+  useCollection: vi.fn(() => ref([
+    { name: 'lila. 2025', slug: 'lila-2025', deletedAt: null },
+  ])),
+}))
 vi.mock('firebase/firestore', () => ({
-  collection: (...a: unknown[]) => mockCollection(...a),
-  onSnapshot: (...a: unknown[]) => mockOnSnapshot(...a),
-  addDoc: (...a: unknown[]) => mockAddDoc(...a),
-  doc: (...a: unknown[]) => mockDoc(...a),
-  updateDoc: (...a: unknown[]) => mockUpdateDoc(...a),
-  deleteDoc: (...a: unknown[]) => mockDeleteDoc(...a),
-  query: (...a: unknown[]) => a,
-  orderBy: (...a: unknown[]) => a,
-}))
-vi.mock('#imports', () => ({
-  useFirebase: () => ({ db: {} }),
-  useState: <T>(_k: string, init: () => T) => ({ value: init() }),
+  collection: (..._args: unknown[]) => ({ path: 'organizations/lila/events' }),
+  query: (...args: unknown[]) => args,
+  where: (...args: unknown[]) => ({ where: args }),
+  orderBy: (...args: unknown[]) => ({ orderBy: args }),
 }))
 
-describe('useLocation', () => {
-  it('createLocation adds with order field', async () => {
-    const { useLocation } = await import('../../layers/core/composables/useLocation')
-    const { createLocation } = useLocation('lila', 'evt1')
-    await createLocation({ name: 'Aktionshalle', order: 0 })
-    expect(mockAddDoc).toHaveBeenCalled()
-    expect(mockAddDoc.mock.calls[0][1]).toMatchObject({ name: 'Aktionshalle', order: 0 })
-  })
+import { useEvents } from '#layers/core/app/composables/useEvents'
 
-  it('removeLocation deletes the doc', async () => {
-    const { useLocation } = await import('../../layers/core/composables/useLocation')
-    const { removeLocation } = useLocation('lila', 'evt1')
-    await removeLocation('loc1')
-    expect(mockDeleteDoc).toHaveBeenCalled()
+describe('useEvents', () => {
+  it('lists non-deleted events for the given org', () => {
+    const events = useEvents('lila')
+    expect(events.value).toHaveLength(1)
+    expect(events.value[0].slug).toBe('lila-2025')
   })
 })
 ```
 
-- [ ] **Step 6: Run to verify failure**
+- [ ] **Step 2: Verify test fails**
 
 ```bash
-pnpm exec vitest run tests/composables/useLocation.test.ts
+pnpm test tests/composables/useEvents.test.ts
 ```
+
 Expected: FAIL — module not found.
 
-- [ ] **Step 7: Write `useLocation` composable**
+- [ ] **Step 3: Implement `useEvents`**
 
 ```ts
-// layers/core/composables/useLocation.ts
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore'
-import type { Location } from '../types'
+// layers/core/app/composables/useEvents.ts
+import { useCollection, useFirestore } from 'vuefire'
+import { collection, query, where, orderBy } from 'firebase/firestore'
+import type { Event } from '#layers/core/shared/types'
 
-type LocationRow = Location & { id: string }
-
-export const useLocation = (orgId: string, eventId: string) => {
-  const { db } = useFirebase()
-  const locations = useState<LocationRow[]>(`locations:${orgId}:${eventId}`, () => [])
-
-  const subscribe = () => {
-    const ref = query(
-      collection(db, 'organizations', orgId, 'events', eventId, 'locations'),
-      orderBy('order', 'asc'),
-    )
-    return onSnapshot(ref, (snap) => {
-      locations.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Location) }))
-    })
-  }
-
-  const createLocation = (input: Location) =>
-    addDoc(collection(db, 'organizations', orgId, 'events', eventId, 'locations'), input)
-
-  const updateLocation = (id: string, patch: Partial<Location>) =>
-    updateDoc(doc(db, 'organizations', orgId, 'events', eventId, 'locations', id), patch)
-
-  const removeLocation = (id: string) =>
-    deleteDoc(doc(db, 'organizations', orgId, 'events', eventId, 'locations', id))
-
-  return { locations, subscribe, createLocation, updateLocation, removeLocation }
+export function useEvents(orgId: string) {
+  const db = useFirestore()
+  const ref = collection(db, 'organizations', orgId, 'events')
+  return useCollection<Event>(
+    query(ref, where('deletedAt', '==', null), orderBy('dates.start', 'desc')),
+  )
 }
 ```
 
-- [ ] **Step 8: Run all tests**
+- [ ] **Step 4: Implement `useEvent`**
 
-```bash
-pnpm exec vitest run
+```ts
+// layers/core/app/composables/useEvent.ts
+import { useDocument, useFirestore } from 'vuefire'
+import { doc } from 'firebase/firestore'
+import type { Event } from '#layers/core/shared/types'
+
+export function useEvent(orgId: string, eventId: string) {
+  const db = useFirestore()
+  return useDocument<Event>(doc(db, 'organizations', orgId, 'events', eventId))
+}
 ```
-Expected: all passing.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 5: Run tests**
 
 ```bash
-git add layers/core/composables/ tests/composables/
-git commit -m "feat(core): add useEvent and useLocation composables"
+pnpm test
+```
+
+Expected: PASS for `useEvents`. (No test for `useEvent` — single-doc reads are a thin pass-through; integration coverage in Plan B's rules tests is sufficient.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .
+git commit -m "feat(core): add useEvents + useEvent composables"
 ```
 
 ---
 
-## Task 9: Set up `functions/` project (TypeScript + vitest)
+## Task 13: `useLocations` composable + tests
 
 **Files:**
-- Create: `functions/package.json`, `tsconfig.json`, `vitest.config.ts`
-- Create: `functions/src/index.ts`, `functions/src/core/helpers.ts`
-- Create: `functions/src/test/setup.ts`
+- Create: `layers/core/app/composables/useLocations.ts`
+- Create: `tests/composables/useLocations.test.ts`
 
-- [ ] **Step 1: Init the sub-package**
-
-```bash
-mkdir -p functions/src/core functions/src/test
-cd functions
-pnpm init
-```
-
-- [ ] **Step 2: Replace generated `functions/package.json`**
-
-```json
-{
-  "name": "functions",
-  "private": true,
-  "main": "lib/index.js",
-  "engines": { "node": "20" },
-  "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "dependencies": {
-    "firebase-admin": "^12.0.0",
-    "firebase-functions": "^5.0.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.4.0",
-    "vitest": "^1.5.0"
-  }
-}
-```
-
-- [ ] **Step 3: Install**
-
-```bash
-pnpm install
-cd ..
-```
-
-- [ ] **Step 4: Write `functions/tsconfig.json`**
-
-```json
-{
-  "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "target": "es2022",
-    "lib": ["es2022"],
-    "strict": true,
-    "esModuleInterop": true,
-    "outDir": "lib",
-    "sourceMap": true,
-    "declaration": true,
-    "skipLibCheck": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["src/test/**"]
-}
-```
-
-- [ ] **Step 5: Write `functions/vitest.config.ts`**
+- [ ] **Step 1: Write the failing test**
 
 ```ts
-import { defineConfig } from 'vitest/config'
+// tests/composables/useLocations.test.ts
+import { describe, it, expect, vi } from 'vitest'
+import { ref } from 'vue'
 
-export default defineConfig({
-  test: { setupFiles: ['./src/test/setup.ts'], environment: 'node' },
+vi.mock('vuefire', () => ({
+  useFirestore: () => ({}),
+  useCollection: vi.fn(() => ref([
+    { name: 'Aktionshalle', order: 1 },
+    { name: 'Clubraum',     order: 2 },
+  ])),
+}))
+vi.mock('firebase/firestore', () => ({
+  collection: (..._args: unknown[]) => ({ path: '...' }),
+  query: (...args: unknown[]) => args,
+  orderBy: (...args: unknown[]) => ({ orderBy: args }),
+}))
+
+import { useLocations } from '#layers/core/app/composables/useLocations'
+
+describe('useLocations', () => {
+  it('returns ordered locations for the event', () => {
+    const locs = useLocations('lila', 'lila-2025')
+    expect(locs.value.map((l: { name: string }) => l.name)).toEqual(['Aktionshalle', 'Clubraum'])
+  })
 })
 ```
 
-- [ ] **Step 6: Write `functions/src/test/setup.ts` to point Admin SDK at emulators**
+- [ ] **Step 2: Verify test fails**
 
-```ts
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
-process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
-process.env.GCLOUD_PROJECT = 'festivalmgr-dev'
+```bash
+pnpm test tests/composables/useLocations.test.ts
 ```
 
-- [ ] **Step 7: Write `functions/src/core/helpers.ts`**
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement `useLocations`**
 
 ```ts
-import * as admin from 'firebase-admin'
+// layers/core/app/composables/useLocations.ts
+import { useCollection, useFirestore } from 'vuefire'
+import { collection, query, orderBy } from 'firebase/firestore'
+import type { Location } from '#layers/core/shared/types'
 
-if (admin.apps.length === 0) admin.initializeApp({ projectId: 'festivalmgr-dev' })
-
-export const db = () => admin.firestore()
-export const auth = () => admin.auth()
-
-export const requireDirector = (
-  ctxAuth: { uid?: string; token?: { orgId?: string; role?: string } } | undefined,
-  orgId: string,
-) => {
-  if (!ctxAuth?.uid) throw new Error('unauthenticated')
-  if (ctxAuth.token?.orgId !== orgId) throw new Error('cross-tenant')
-  if (ctxAuth.token?.role !== 'director') throw new Error('not-a-director')
+export function useLocations(orgId: string, eventId: string) {
+  const db = useFirestore()
+  const ref = collection(db, 'organizations', orgId, 'events', eventId, 'locations')
+  return useCollection<Location>(query(ref, orderBy('order', 'asc')))
 }
 ```
 
-- [ ] **Step 8: Write `functions/src/index.ts` (placeholder; populated by next tasks)**
-
-```ts
-// re-exports populated by setMembership / revokeMembership / onUserCreated
-export {} from './core/helpers'
-```
-
-- [ ] **Step 9: Verify build compiles**
+- [ ] **Step 4: Run the test**
 
 ```bash
-pnpm --filter functions build
+pnpm test tests/composables/useLocations.test.ts
 ```
-Expected: `lib/` directory created without errors.
 
-- [ ] **Step 10: Commit**
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add functions/
-git commit -m "chore(functions): scaffold typescript functions project"
+git add .
+git commit -m "feat(core): add useLocations composable"
 ```
 
 ---
 
-## Task 10: Implement `setMembership` callable Function (TDD)
+## Task 14: `useMemberships` composable
 
 **Files:**
-- Create: `functions/src/core/setMembership.ts`, `functions/src/test/setMembership.test.ts`
-- Modify: `functions/src/index.ts`
+- Create: `layers/core/app/composables/useMemberships.ts`
 
-- [ ] **Step 1: Write the failing test (run against the emulator)**
+No unit test — orchestration is a thin pass-through; rules tests in Plan B verify access semantics.
+
+- [ ] **Step 1: Implement `useMemberships`**
 
 ```ts
-// functions/src/test/setMembership.test.ts
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import * as admin from 'firebase-admin'
-import { setMembership } from '../core/setMembership'
+// layers/core/app/composables/useMemberships.ts
+import { useCollection, useFirestore } from 'vuefire'
+import { collection } from 'firebase/firestore'
+import type { Membership } from '#layers/core/shared/types'
 
-const ORG = 'lila'
-const DIRECTOR_UID = 'dir1'
-
-beforeAll(async () => {
-  await admin.firestore().collection('organizations').doc(ORG).set({
-    name: 'lila e.V.', slug: ORG, defaultLocale: 'en', defaultCurrency: 'CHF',
-    enabledModules: ['artists'], createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  })
-})
-
-beforeEach(async () => {
-  // Wipe memberships between tests
-  const memberships = await admin.firestore().collection(`organizations/${ORG}/memberships`).get()
-  await Promise.all(memberships.docs.map((d) => d.ref.delete()))
-})
-
-describe('setMembership', () => {
-  it('creates pending membership and a User stub for a new email', async () => {
-    const result = await setMembership.run({
-      data: { orgId: ORG, email: 'sarah@example.com', role: 'booker' },
-      auth: { uid: DIRECTOR_UID, token: { orgId: ORG, role: 'director' } },
-    } as never)
-
-    expect(result.userId).toBeTruthy()
-    const memberSnap = await admin.firestore().doc(`organizations/${ORG}/memberships/${result.userId}`).get()
-    expect(memberSnap.data()).toMatchObject({ role: 'booker', status: 'pending' })
-
-    const userSnap = await admin.firestore().doc(`users/${result.userId}`).get()
-    expect(userSnap.data()).toMatchObject({ email: 'sarah@example.com', orgIds: [] })
-  })
-
-  it('rejects non-director callers', async () => {
-    await expect(setMembership.run({
-      data: { orgId: ORG, email: 'a@b.com', role: 'booker' },
-      auth: { uid: 'someone', token: { orgId: ORG, role: 'crew' } },
-    } as never)).rejects.toThrow(/director/i)
-  })
-
-  it('rejects cross-tenant calls', async () => {
-    await expect(setMembership.run({
-      data: { orgId: 'other-org', email: 'a@b.com', role: 'booker' },
-      auth: { uid: DIRECTOR_UID, token: { orgId: ORG, role: 'director' } },
-    } as never)).rejects.toThrow(/cross-tenant/)
-  })
-})
+export function useMemberships(orgId: string) {
+  const db = useFirestore()
+  const ref = collection(db, 'organizations', orgId, 'memberships')
+  return useCollection<Membership>(ref)
+}
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [ ] **Step 2: Commit**
 
-In one terminal: `firebase emulators:start --only auth,firestore --project festivalmgr-dev`
-In another: `pnpm --filter functions test`
+```bash
+git add .
+git commit -m "feat(core): add useMemberships composable"
+```
 
-Expected: FAIL — `setMembership` not exported.
+---
 
-- [ ] **Step 3: Implement `setMembership`**
+## Task 15: `useFunctions` composable (Cloud Functions client)
+
+**Files:**
+- Create: `layers/core/app/composables/useFunctions.ts`
+
+A typed wrapper around `httpsCallable` so each callable is a single function call from a page.
+
+- [ ] **Step 1: Implement**
 
 ```ts
-// functions/src/core/setMembership.ts
-import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import * as admin from 'firebase-admin'
-import { db, requireDirector } from './helpers'
+// layers/core/app/composables/useFunctions.ts
+import { useNuxtApp } from '#app'
+import { getFunctions, httpsCallable, type Functions } from 'firebase/functions'
+import type { FirebaseApp } from 'firebase/app'
 
 type Role = 'director' | 'booker' | 'production' | 'finance' | 'pr' | 'crew'
 
-export const setMembership = onCall<{ orgId: string; email: string; role: Role }>(async (req) => {
-  const { orgId, email, role } = req.data
-  requireDirector(req.auth, orgId)
-
-  // Find or create the user record. We do not create the Auth account here; the
-  // onUserCreated trigger handles claim assignment when the invitee first signs in.
-  const usersRef = db().collection('users')
-  let userDoc = await usersRef.where('email', '==', email).limit(1).get()
-  let userId: string
-
-  if (userDoc.empty) {
-    userId = usersRef.doc().id
-    await usersRef.doc(userId).set({
-      email,
-      displayName: email.split('@')[0],
-      orgIds: [],
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
-  } else {
-    userId = userDoc.docs[0].id
-  }
-
-  await db().doc(`organizations/${orgId}/memberships/${userId}`).set({
-    userId,
-    role,
-    invitedBy: req.auth!.uid,
-    invitedAt: admin.firestore.FieldValue.serverTimestamp(),
-    status: 'pending',
-  })
-
-  // Sending the magic-link email is intentionally deferred to the auth UX
-  // (the invitee initiates sign-in themselves). The membership exists and is
-  // matched to their email when they first log in (handled by onUserCreated).
-  return { userId }
-})
-```
-
-- [ ] **Step 4: Re-export from `functions/src/index.ts`**
-
-```ts
-export { setMembership } from './core/setMembership'
-```
-
-- [ ] **Step 5: Run tests to verify pass**
-
-```bash
-pnpm --filter functions test
-```
-Expected: 3 passed.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add functions/src/core/setMembership.ts functions/src/test/setMembership.test.ts functions/src/index.ts
-git commit -m "feat(functions): add setMembership callable"
-```
-
----
-
-## Task 11: Implement `revokeMembership` callable (TDD)
-
-**Files:**
-- Create: `functions/src/core/revokeMembership.ts`, `functions/src/test/revokeMembership.test.ts`
-- Modify: `functions/src/index.ts`
-
-- [ ] **Step 1: Write the failing test**
-
-```ts
-// functions/src/test/revokeMembership.test.ts
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import * as admin from 'firebase-admin'
-import { revokeMembership } from '../core/revokeMembership'
-
-const ORG = 'lila'
-const DIRECTOR_UID = 'dir1'
-
-beforeAll(async () => {
-  await admin.firestore().collection('organizations').doc(ORG).set({
-    name: 'lila e.V.', slug: ORG, defaultLocale: 'en', defaultCurrency: 'CHF',
-    enabledModules: ['artists'], createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  })
-})
-
-beforeEach(async () => {
-  await admin.firestore().doc(`users/u-target`).set({
-    email: 't@example.com', displayName: 't', orgIds: [ORG],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  })
-  await admin.firestore().doc(`organizations/${ORG}/memberships/u-target`).set({
-    userId: 'u-target', role: 'booker', status: 'active',
-    invitedBy: DIRECTOR_UID, invitedAt: admin.firestore.FieldValue.serverTimestamp(),
-  })
-  try { await admin.auth().createUser({ uid: 'u-target', email: 't@example.com' }) } catch {}
-  await admin.auth().setCustomUserClaims('u-target', { orgId: ORG, role: 'booker' })
-})
-
-describe('revokeMembership', () => {
-  it('marks revoked, clears claim, removes orgId from User.orgIds', async () => {
-    await revokeMembership.run({
-      data: { orgId: ORG, userId: 'u-target' },
-      auth: { uid: DIRECTOR_UID, token: { orgId: ORG, role: 'director' } },
-    } as never)
-
-    const m = await admin.firestore().doc(`organizations/${ORG}/memberships/u-target`).get()
-    expect(m.data()?.status).toBe('revoked')
-
-    const u = await admin.firestore().doc('users/u-target').get()
-    expect(u.data()?.orgIds).toEqual([])
-
-    const authUser = await admin.auth().getUser('u-target')
-    expect(authUser.customClaims?.orgId).toBeUndefined()
-  })
-
-  it('rejects non-directors', async () => {
-    await expect(revokeMembership.run({
-      data: { orgId: ORG, userId: 'u-target' },
-      auth: { uid: 'x', token: { orgId: ORG, role: 'booker' } },
-    } as never)).rejects.toThrow(/director/i)
-  })
-})
-```
-
-- [ ] **Step 2: Run to verify failure**
-
-```bash
-pnpm --filter functions test
-```
-Expected: FAIL — `revokeMembership` not found.
-
-- [ ] **Step 3: Implement `revokeMembership`**
-
-```ts
-// functions/src/core/revokeMembership.ts
-import { onCall } from 'firebase-functions/v2/https'
-import * as admin from 'firebase-admin'
-import { db, auth, requireDirector } from './helpers'
-
-export const revokeMembership = onCall<{ orgId: string; userId: string }>(async (req) => {
-  const { orgId, userId } = req.data
-  requireDirector(req.auth, orgId)
-
-  await db().doc(`organizations/${orgId}/memberships/${userId}`).update({ status: 'revoked' })
-
-  // Best-effort: user may not have an Auth account yet (was invited but never signed in).
-  try {
-    const u = await auth().getUser(userId)
-    const claims = { ...(u.customClaims ?? {}) } as Record<string, unknown>
-    if (claims.orgId === orgId) {
-      delete claims.orgId
-      delete claims.role
-    }
-    await auth().setCustomUserClaims(userId, claims)
-  } catch (e: unknown) {
-    if ((e as { code?: string }).code !== 'auth/user-not-found') throw e
-  }
-
-  await db().doc(`users/${userId}`).update({
-    orgIds: admin.firestore.FieldValue.arrayRemove(orgId),
-  })
-
-  return { ok: true }
-})
-```
-
-- [ ] **Step 4: Add to `functions/src/index.ts`**
-
-```ts
-export { setMembership } from './core/setMembership'
-export { revokeMembership } from './core/revokeMembership'
-```
-
-- [ ] **Step 5: Run tests to verify pass**
-
-```bash
-pnpm --filter functions test
-```
-Expected: all passing.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add functions/src/core/revokeMembership.ts functions/src/test/revokeMembership.test.ts functions/src/index.ts
-git commit -m "feat(functions): add revokeMembership callable"
-```
-
----
-
-## Task 12: Implement `onUserCreated` auth trigger (TDD)
-
-**Files:**
-- Create: `functions/src/core/onUserCreated.ts`, `functions/src/test/onUserCreated.test.ts`
-- Modify: `functions/src/index.ts`
-
-This trigger fires when a user is first created in Firebase Auth. It looks for any pending membership keyed by their email, sets the custom claim, flips the membership to active, and adds the orgId to `User.orgIds`. This is what makes the magic-link invite flow complete.
-
-- [ ] **Step 1: Write the failing test**
-
-```ts
-// functions/src/test/onUserCreated.test.ts
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import * as admin from 'firebase-admin'
-import { onUserCreatedHandler } from '../core/onUserCreated'
-
-const ORG = 'lila'
-
-beforeAll(async () => {
-  await admin.firestore().doc(`organizations/${ORG}`).set({
-    name: 'lila e.V.', slug: ORG, defaultLocale: 'en', defaultCurrency: 'CHF',
-    enabledModules: ['artists'], createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  })
-})
-
-beforeEach(async () => {
-  // Reset
-  for (const path of [`organizations/${ORG}/memberships`]) {
-    const docs = await admin.firestore().collection(path).get()
-    await Promise.all(docs.docs.map((d) => d.ref.delete()))
-  }
-})
-
-describe('onUserCreatedHandler', () => {
-  it('activates pending memberships matching the email and sets claim', async () => {
-    // Director already invited sarah@example.com (creating a pending membership keyed
-    // by a userId we generate here)
-    const userId = 'u-sarah'
-    await admin.firestore().doc(`users/${userId}`).set({
-      email: 'sarah@example.com', displayName: 'sarah', orgIds: [],
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
-    await admin.firestore().doc(`organizations/${ORG}/memberships/${userId}`).set({
-      userId, role: 'booker', status: 'pending',
-      invitedBy: 'dir', invitedAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
-
-    // Now sarah signs up via magic link — Firebase creates a *new* auth user
-    // with a different uid. Simulate it.
-    const newAuthUid = 'auth-uid-xyz'
-    try { await admin.auth().createUser({ uid: newAuthUid, email: 'sarah@example.com' }) } catch {}
-
-    await onUserCreatedHandler({ uid: newAuthUid, email: 'sarah@example.com' })
-
-    // Membership migrated: keyed by the new auth uid, status active
-    const newMember = await admin.firestore().doc(`organizations/${ORG}/memberships/${newAuthUid}`).get()
-    expect(newMember.data()?.status).toBe('active')
-    expect(newMember.data()?.role).toBe('booker')
-
-    // Old placeholder membership cleaned up
-    const oldMember = await admin.firestore().doc(`organizations/${ORG}/memberships/${userId}`).get()
-    expect(oldMember.exists).toBe(false)
-
-    // Claim set
-    const u = await admin.auth().getUser(newAuthUid)
-    expect(u.customClaims).toMatchObject({ orgId: ORG, role: 'booker' })
-
-    // User profile migrated
-    const newUser = await admin.firestore().doc(`users/${newAuthUid}`).get()
-    expect(newUser.data()?.orgIds).toContain(ORG)
-  })
-
-  it('is a no-op when no pending membership matches the email', async () => {
-    const uid = 'random-uid'
-    try { await admin.auth().createUser({ uid, email: 'unknown@example.com' }) } catch {}
-    await onUserCreatedHandler({ uid, email: 'unknown@example.com' })
-    const u = await admin.auth().getUser(uid)
-    expect(u.customClaims?.orgId).toBeUndefined()
-  })
-})
-```
-
-- [ ] **Step 2: Run to verify failure**
-
-```bash
-pnpm --filter functions test
-```
-Expected: FAIL — handler not exported.
-
-- [ ] **Step 3: Implement the trigger**
-
-```ts
-// functions/src/core/onUserCreated.ts
-import { beforeUserCreated } from 'firebase-functions/v2/identity'
-import * as admin from 'firebase-admin'
-import { db, auth } from './helpers'
-
-// Pure handler so we can unit-test without spinning up the runtime wrapper.
-export async function onUserCreatedHandler(input: { uid: string; email: string | null | undefined }) {
-  const email = (input.email ?? '').toLowerCase()
-  if (!email) return
-
-  // Find any pending memberships keyed by a user doc whose email matches.
-  const userQuery = await db().collection('users').where('email', '==', email).get()
-
-  for (const oldUserDoc of userQuery.docs) {
-    if (oldUserDoc.id === input.uid) continue // already keyed correctly
-
-    const oldData = oldUserDoc.data()
-    // Migrate user doc to the new uid keying
-    await db().doc(`users/${input.uid}`).set({
-      ...oldData,
-      orgIds: oldData.orgIds ?? [],
-    }, { merge: true })
-
-    // For every org in oldData.orgIds AND every pending membership, migrate.
-    const memberships = await db()
-      .collectionGroup('memberships')
-      .where('userId', '==', oldUserDoc.id)
-      .get()
-
-    for (const m of memberships.docs) {
-      const orgId = m.ref.parent.parent!.id
-      const data = m.data()
-      const newRef = db().doc(`organizations/${orgId}/memberships/${input.uid}`)
-      await newRef.set({
-        ...data,
-        userId: input.uid,
-        status: 'active',
-        acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
-      })
-      await m.ref.delete()
-
-      // Set claim (single-org for v1; latest invite wins on conflict)
-      await auth().setCustomUserClaims(input.uid, { orgId, role: data.role })
-
-      await db().doc(`users/${input.uid}`).update({
-        orgIds: admin.firestore.FieldValue.arrayUnion(orgId),
-      })
-    }
-
-    // Clean up placeholder user doc
-    if (oldUserDoc.id !== input.uid) await oldUserDoc.ref.delete()
-  }
+type Callables = {
+  setMembership: (data: {
+    orgId: string
+    email: string
+    role: Role
+  }) => Promise<{ membershipId: string }>
+
+  revokeMembership: (data: {
+    orgId: string
+    membershipId: string
+  }) => Promise<{ ok: true }>
+
+  claimMembership: (data: Record<string, never>) => Promise<{
+    activatedOrgIds: string[]
+  }>
 }
 
-export const onUserCreated = beforeUserCreated(async (event) => {
-  await onUserCreatedHandler({ uid: event.data.uid, email: event.data.email })
-})
-```
-
-> **Note on `beforeUserCreated`:** Firebase Auth blocking functions require the Blaze plan. In the dev emulator they work without a plan. Plan C addresses production billing.
-
-- [ ] **Step 4: Add to `functions/src/index.ts`**
-
-```ts
-export { setMembership } from './core/setMembership'
-export { revokeMembership } from './core/revokeMembership'
-export { onUserCreated } from './core/onUserCreated'
-```
-
-- [ ] **Step 5: Run all functions tests**
-
-```bash
-pnpm --filter functions test
-```
-Expected: all passing.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add functions/src/core/onUserCreated.ts functions/src/test/onUserCreated.test.ts functions/src/index.ts
-git commit -m "feat(functions): add onUserCreated auth trigger for claim sync"
-```
-
----
-
-## Task 13: Add `seed-director` script
-
-**Files:**
-- Create: `scripts/seed-director.ts`, `scripts/tsconfig.json`
-- Modify: `package.json`
-
-The seed script creates the bootstrap org (`lila`), a director user (`dario`), and one pending membership for that director, then sets the claim. Idempotent — safe to re-run after wiping the emulator.
-
-- [ ] **Step 1: Install tsx for running TS scripts**
-
-```bash
-pnpm add -D tsx
-```
-
-- [ ] **Step 2: Write `scripts/seed-director.ts`**
-
-```ts
-// scripts/seed-director.ts
-import * as admin from 'firebase-admin'
-
-process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080'
-process.env.FIREBASE_AUTH_EMULATOR_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '127.0.0.1:9099'
-process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT ?? 'festivalmgr-dev'
-
-admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT })
-
-const ORG = process.env.SEED_ORG_SLUG ?? 'lila'
-const DIRECTOR_EMAIL = process.env.SEED_DIRECTOR_EMAIL ?? 'dario@example.com'
-const DIRECTOR_UID = process.env.SEED_DIRECTOR_UID ?? 'dario'
-
-async function main() {
-  await admin.firestore().doc(`organizations/${ORG}`).set({
-    name: 'lila. queer festival e.V.',
-    slug: ORG,
-    defaultLocale: 'en',
-    defaultCurrency: 'CHF',
-    enabledModules: ['artists', 'budget', 'booking', 'riders', 'schedule'],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true })
-
-  // Create the auth user with a temporary "magic-link will overwrite" email.
-  try { await admin.auth().getUser(DIRECTOR_UID) } catch {
-    await admin.auth().createUser({ uid: DIRECTOR_UID, email: DIRECTOR_EMAIL })
+export function useFunctions(): Callables {
+  const { $firebaseApp } = useNuxtApp() as unknown as { $firebaseApp: FirebaseApp }
+  const fns: Functions = getFunctions($firebaseApp, 'us-central1')
+  const wrap = <K extends keyof Callables>(name: K) =>
+    (async (data: Parameters<Callables[K]>[0]) =>
+      (await httpsCallable(fns, name as string)(data)).data) as Callables[K]
+  return {
+    setMembership:    wrap('setMembership'),
+    revokeMembership: wrap('revokeMembership'),
+    claimMembership:  wrap('claimMembership'),
   }
-  await admin.auth().setCustomUserClaims(DIRECTOR_UID, { orgId: ORG, role: 'director' })
-
-  await admin.firestore().doc(`users/${DIRECTOR_UID}`).set({
-    email: DIRECTOR_EMAIL,
-    displayName: 'Dario',
-    orgIds: [ORG],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true })
-
-  await admin.firestore().doc(`organizations/${ORG}/memberships/${DIRECTOR_UID}`).set({
-    userId: DIRECTOR_UID,
-    role: 'director',
-    invitedBy: DIRECTOR_UID,
-    invitedAt: admin.firestore.FieldValue.serverTimestamp(),
-    acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
-    status: 'active',
-  }, { merge: true })
-
-  console.log(`✓ seeded org=${ORG}, director uid=${DIRECTOR_UID}, email=${DIRECTOR_EMAIL}`)
-  process.exit(0)
-}
-
-main().catch((e) => { console.error(e); process.exit(1) })
-```
-
-- [ ] **Step 3: Add npm script to root `package.json`**
-
-Modify `package.json` `scripts` block:
-
-```json
-"scripts": {
-  "build": "nuxt build",
-  "dev": "FIREBASE_USE_EMULATOR=1 concurrently \"firebase emulators:start --project festivalmgr-dev --only auth,firestore,functions,storage\" \"nuxt dev\"",
-  "dev:seed": "tsx scripts/seed-director.ts",
-  "test": "vitest run",
-  "test:watch": "vitest"
 }
 ```
 
-- [ ] **Step 4: Add `concurrently` for the dev script**
+VueFire injects `$firebaseApp` into Nuxt's app context, so this picks up emulator wiring automatically (when `vuefire.emulators.enabled` is true, the SDK rewrites the Functions endpoint to `127.0.0.1:5001`).
+
+- [ ] **Step 2: Commit**
 
 ```bash
-pnpm add -D concurrently
-```
-
-- [ ] **Step 5: Verify the seed runs against an emulator**
-
-In one terminal: `firebase emulators:start --only auth,firestore --project festivalmgr-dev`
-In another: `pnpm dev:seed`
-
-Expected: prints `✓ seeded org=lila, director uid=dario, email=dario@example.com`. Confirm in the Firebase Emulator UI at `http://127.0.0.1:4000`:
-- An `organizations/lila` doc exists.
-- A `users/dario` doc exists with `orgIds: ['lila']`.
-- A membership doc exists at `organizations/lila/memberships/dario` with status `active`.
-- An auth user `dario` with custom claims `{ orgId: "lila", role: "director" }`.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add scripts/ package.json pnpm-lock.yaml
-git commit -m "feat(scripts): add seed-director bootstrap script"
+git add .
+git commit -m "feat(core): add typed useFunctions wrapper"
 ```
 
 ---
 
-## Task 14: Build login page (magic-link + Google)
+## Task 16: Auth route middleware
 
 **Files:**
-- Create: `layers/core/pages/login.vue`, `layers/core/pages/auth/complete.vue`
+- Create: `layers/core/app/middleware/auth.global.ts`
 
-- [ ] **Step 1: Write the login page**
+The global middleware redirects unauthenticated visitors to `/login` for every route except `/login` and `/auth/*`.
+
+- [ ] **Step 1: Implement**
+
+```ts
+// layers/core/app/middleware/auth.global.ts
+import { getCurrentUser } from 'vuefire'
+
+export default defineNuxtRouteMiddleware(async (to) => {
+  const isPublic = to.path === '/login' || to.path.startsWith('/auth/')
+  if (isPublic) return
+  const user = await getCurrentUser()
+  if (!user) {
+    return navigateTo({
+      path: '/login',
+      query: { redirect: to.fullPath },
+    })
+  }
+})
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .
+git commit -m "feat(core): add global auth middleware"
+```
+
+---
+
+## Task 17: Login page (magic-link + Google)
+
+**Files:**
+- Create: `layers/core/app/pages/login.vue`
+
+Uses Firebase Auth's `sendSignInLinkToEmail` and `signInWithPopup`. The magic link redirects to `/auth/complete` (Task 18).
+
+- [ ] **Step 1: Implement**
 
 ```vue
-<!-- layers/core/pages/login.vue -->
+<!-- layers/core/app/pages/login.vue -->
 <script setup lang="ts">
+import { useFirebaseAuth } from 'vuefire'
 import {
-  GoogleAuthProvider, sendSignInLinkToEmail, signInWithPopup,
+  GoogleAuthProvider,
+  sendSignInLinkToEmail,
+  signInWithPopup,
 } from 'firebase/auth'
 
-definePageMeta({ layout: false, public: true })
+definePageMeta({ layout: false })
 
-const { auth } = useFirebase()
 const { t } = useI18n()
+const auth = useFirebaseAuth()!
 const email = ref('')
-const sentToEmail = ref<string | null>(null)
+const sent = ref(false)
 const error = ref<string | null>(null)
-const busy = ref(false)
 
 async function sendLink() {
   error.value = null
-  busy.value = true
   try {
-    const url = `${location.origin}/auth/complete`
-    await sendSignInLinkToEmail(auth, email.value, { url, handleCodeInApp: true })
-    window.localStorage.setItem('emailForSignIn', email.value)
-    sentToEmail.value = email.value
-  } catch (e) {
-    error.value = (e as Error).message
-  } finally {
-    busy.value = false
+    await sendSignInLinkToEmail(auth, email.value, {
+      url: window.location.origin + '/auth/complete',
+      handleCodeInApp: true,
+    })
+    window.localStorage.setItem('festivalmgr.signInEmail', email.value)
+    sent.value = true
+  }
+  catch (e: unknown) {
+    error.value = (e as Error)?.message ?? 'Failed to send link'
   }
 }
 
-async function withGoogle() {
+async function signInGoogle() {
   error.value = null
-  busy.value = true
   try {
     await signInWithPopup(auth, new GoogleAuthProvider())
     await navigateTo('/')
-  } catch (e) {
-    error.value = (e as Error).message
-  } finally {
-    busy.value = false
+  }
+  catch (e: unknown) {
+    error.value = (e as Error)?.message ?? 'Google sign-in failed'
   }
 }
 </script>
@@ -1858,55 +1321,79 @@ async function withGoogle() {
         <h1 class="text-xl font-semibold">{{ t('auth.loginTitle') }}</h1>
       </template>
 
-      <UAlert v-if="error" color="error" :description="error" class="mb-4" />
-      <UAlert v-if="sentToEmail" color="success" :description="t('auth.magicLinkSent')" class="mb-4" />
+      <div v-if="sent" class="text-sm">
+        We sent a sign-in link to <strong>{{ email }}</strong>. Open it in this browser to complete sign-in.
+      </div>
 
-      <form v-if="!sentToEmail" class="space-y-3" @submit.prevent="sendLink">
-        <UFormField :label="t('auth.magicLinkLabel')">
-          <UInput v-model="email" type="email" required autocomplete="email" class="w-full" />
+      <form v-else class="space-y-4" @submit.prevent="sendLink">
+        <UFormField :label="t('auth.emailPlaceholder')" name="email">
+          <UInput v-model="email" type="email" required />
         </UFormField>
-        <UButton type="submit" block :loading="busy">{{ t('auth.magicLinkSubmit') }}</UButton>
+        <UButton type="submit" block>{{ t('auth.magicLinkLabel') }}</UButton>
+        <USeparator label="or" />
+        <UButton color="neutral" variant="subtle" block icon="i-simple-icons-google" @click="signInGoogle">
+          {{ t('auth.googleLabel') }}
+        </UButton>
+        <UAlert v-if="error" color="error" :title="error" />
       </form>
-
-      <USeparator class="my-6" label="or" />
-
-      <UButton block variant="outline" icon="i-simple-icons-google" :loading="busy" @click="withGoogle">
-        {{ t('auth.googleSubmit') }}
-      </UButton>
     </UCard>
   </div>
 </template>
 ```
 
-- [ ] **Step 2: Write the magic-link completion page**
+- [ ] **Step 2: Run dev server, verify the page renders**
+
+```bash
+FIREBASE_USE_EMULATOR=1 pnpm dev
+```
+
+Then visit http://localhost:3000/login and confirm the form renders without console errors. Stop the server.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add .
+git commit -m "feat(core): add login page (magic-link + Google)"
+```
+
+---
+
+## Task 18: Magic-link callback page (`/auth/complete`)
+
+**Files:**
+- Create: `layers/core/app/pages/auth/complete.vue`
+
+- [ ] **Step 1: Implement**
 
 ```vue
-<!-- layers/core/pages/auth/complete.vue -->
+<!-- layers/core/app/pages/auth/complete.vue -->
 <script setup lang="ts">
+import { useFirebaseAuth } from 'vuefire'
 import { isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth'
 
-definePageMeta({ layout: false, public: true })
+definePageMeta({ layout: false })
 
-const { auth } = useFirebase()
-const { t } = useI18n()
+const auth = useFirebaseAuth()!
+const status = ref<'pending' | 'ok' | 'error'>('pending')
 const error = ref<string | null>(null)
 
 onMounted(async () => {
   if (!isSignInWithEmailLink(auth, window.location.href)) {
-    error.value = 'Invalid sign-in link.'
+    status.value = 'error'
+    error.value = 'This page expects a magic link.'
     return
   }
-  let email = window.localStorage.getItem('emailForSignIn')
-  if (!email) email = window.prompt('Confirm your email to complete sign-in') ?? null
-  if (!email) { error.value = 'Email required.'; return }
+  let email = window.localStorage.getItem('festivalmgr.signInEmail')
+  if (!email) email = window.prompt('Confirm the email address you signed in with') ?? ''
   try {
     await signInWithEmailLink(auth, email, window.location.href)
-    window.localStorage.removeItem('emailForSignIn')
-    // Force a token refresh so any custom claims set by onUserCreated land in the ID token.
-    await auth.currentUser?.getIdToken(true)
+    window.localStorage.removeItem('festivalmgr.signInEmail')
+    status.value = 'ok'
     await navigateTo('/')
-  } catch (e) {
-    error.value = (e as Error).message
+  }
+  catch (e: unknown) {
+    status.value = 'error'
+    error.value = (e as Error)?.message ?? 'Sign-in failed'
   }
 })
 </script>
@@ -1914,608 +1401,1422 @@ onMounted(async () => {
 <template>
   <div class="min-h-screen flex items-center justify-center p-6">
     <UCard>
-      <p v-if="!error">{{ t('auth.completing') }}</p>
-      <UAlert v-else color="error" :description="error" />
+      <p v-if="status === 'pending'">Completing sign-in…</p>
+      <UAlert v-else-if="status === 'error'" color="error" :title="error ?? 'Sign-in failed'" />
+      <p v-else>Signed in. Redirecting…</p>
     </UCard>
   </div>
 </template>
 ```
 
-- [ ] **Step 3: Verify pages compile**
+- [ ] **Step 2: Commit**
 
 ```bash
-pnpm exec nuxt prepare
-```
-Expected: no errors.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add layers/core/pages/login.vue layers/core/pages/auth/
-git commit -m "feat(core): add magic-link and google login pages"
+git add .
+git commit -m "feat(core): handle magic-link callback at /auth/complete"
 ```
 
 ---
 
-## Task 15: Add auth-guard middleware and dashboard redirect
+## Task 19: Post-sign-in plugin: activate pending memberships
 
 **Files:**
-- Create: `layers/core/middleware/auth.global.ts`, `layers/core/pages/index.vue`
+- Create: `layers/core/app/plugins/claim-membership.client.ts`
 
-- [ ] **Step 1: Write the global middleware**
+When a user signs in for the first time, this plugin invokes the `claimMembership` callable to activate any pending invites matching their email and force a token refresh so new claims are picked up.
+
+- [ ] **Step 1: Implement**
 
 ```ts
-// layers/core/middleware/auth.global.ts
-export default defineNuxtRouteMiddleware((to) => {
-  if (to.meta.public) return
+// layers/core/app/plugins/claim-membership.client.ts
+import { watch } from 'vue'
+import { useCurrentUser } from 'vuefire'
 
-  // Server-side renders skip auth — we're SPA mode anyway, but be defensive.
-  if (import.meta.server) return
+export default defineNuxtPlugin(async () => {
+  const user = useCurrentUser()
 
-  const { user } = useUser()
-  if (!user.value) return navigateTo('/login')
+  async function activate() {
+    if (!user.value) return
+    const { claimMembership } = useFunctions()
+    try {
+      const { activatedOrgIds } = await claimMembership({})
+      if (activatedOrgIds.length > 0) {
+        await user.value.getIdToken(true)
+      }
+    }
+    catch {
+      // Non-fatal: page guards handle the no-org case.
+    }
+  }
+
+  await activate()
+  watch(user, activate)
 })
 ```
 
-- [ ] **Step 2: Write a dashboard placeholder**
-
-```vue
-<!-- layers/core/pages/index.vue -->
-<script setup lang="ts">
-const { user, signOut } = useUser()
-</script>
-
-<template>
-  <div class="min-h-screen p-8 max-w-3xl mx-auto">
-    <header class="flex items-center justify-between mb-8">
-      <h1 class="text-2xl font-semibold">festivalmgr</h1>
-      <div class="flex items-center gap-3">
-        <span class="text-sm text-default-500">{{ user?.email }}</span>
-        <UButton size="sm" variant="ghost" @click="signOut">Sign out</UButton>
-      </div>
-    </header>
-
-    <nav class="grid gap-3 sm:grid-cols-2">
-      <UCard><NuxtLink to="/events"><h2 class="font-medium">Events</h2></NuxtLink></UCard>
-      <UCard><NuxtLink to="/settings/members"><h2 class="font-medium">Members</h2></NuxtLink></UCard>
-      <UCard><NuxtLink to="/settings"><h2 class="font-medium">Org settings</h2></NuxtLink></UCard>
-    </nav>
-  </div>
-</template>
-```
-
-- [ ] **Step 3: Verify pages compile**
+- [ ] **Step 2: Commit**
 
 ```bash
-pnpm exec nuxt prepare
-```
-Expected: no errors.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add layers/core/middleware/ layers/core/pages/index.vue
-git commit -m "feat(core): add auth middleware and dashboard"
+git add .
+git commit -m "feat(core): activate pending memberships on sign-in"
 ```
 
 ---
 
-## Task 16: Build org settings page
+## Task 20: AppShell + dashboard placeholder + sign-out
 
 **Files:**
-- Create: `layers/core/pages/settings/index.vue`
+- Create: `layers/core/app/components/AppShell.vue`, `layers/core/app/pages/index.vue`
 
-- [ ] **Step 1: Write the page**
+- [ ] **Step 1: Implement `AppShell.vue`**
 
 ```vue
-<!-- layers/core/pages/settings/index.vue -->
+<!-- layers/core/app/components/AppShell.vue -->
 <script setup lang="ts">
-import { doc, updateDoc } from 'firebase/firestore'
+import { useFirebaseAuth } from 'vuefire'
+import { signOut } from 'firebase/auth'
 
-const { user } = useUser()
+const auth = useFirebaseAuth()!
 const { t } = useI18n()
-const { db } = useFirebase()
 
-// In v1, the user belongs to exactly one org via custom claim.
-const claimResult = await user.value?.getIdTokenResult()
-const orgId = claimResult?.claims.orgId as string | undefined
+const navItems = [
+  { label: t('nav.events'),   to: '/events',           icon: 'i-lucide-calendar' },
+  { label: t('nav.members'),  to: '/settings/members', icon: 'i-lucide-users' },
+  { label: t('nav.settings'), to: '/settings',         icon: 'i-lucide-settings' },
+]
 
-if (!orgId) throw createError({ statusCode: 403, statusMessage: 'No org' })
-
-const { org, subscribe } = useOrg(orgId)
-let stop: (() => void) | undefined
-onMounted(() => { stop = subscribe() })
-onBeforeUnmount(() => stop?.())
-
-const editName = ref('')
-watchEffect(() => { if (org.value && !editName.value) editName.value = org.value.name })
-
-async function save() {
-  if (!org.value) return
-  await updateDoc(doc(db, 'organizations', orgId!), { name: editName.value })
+async function doSignOut() {
+  await signOut(auth)
+  await navigateTo('/login')
 }
 </script>
 
 <template>
-  <div class="min-h-screen p-8 max-w-2xl mx-auto">
-    <h1 class="text-2xl font-semibold mb-6">{{ t('settings.orgTitle') }}</h1>
-
-    <form v-if="org" class="space-y-4" @submit.prevent="save">
-      <UFormField :label="t('settings.orgNameLabel')">
-        <UInput v-model="editName" class="w-full" />
-      </UFormField>
-      <UButton type="submit">{{ t('settings.save') }}</UButton>
-    </form>
-
-    <p v-else>Loading…</p>
+  <div class="min-h-screen grid grid-cols-[260px_1fr]">
+    <aside class="border-r border-default p-4 flex flex-col gap-4">
+      <div class="text-lg font-semibold">{{ t('app.title') }}</div>
+      <UNavigationMenu :items="navItems" orientation="vertical" />
+      <div class="mt-auto">
+        <UButton variant="subtle" block @click="doSignOut">{{ t('nav.signOut') }}</UButton>
+      </div>
+    </aside>
+    <main class="p-6">
+      <slot />
+    </main>
   </div>
 </template>
 ```
 
-- [ ] **Step 2: Verify compile**
+- [ ] **Step 2: Implement `pages/index.vue`**
 
-```bash
-pnpm exec nuxt prepare
+```vue
+<!-- layers/core/app/pages/index.vue -->
+<script setup lang="ts">
+const { org, role } = await useOrg()
+</script>
+
+<template>
+  <AppShell>
+    <h1 class="text-2xl font-semibold mb-4">Welcome</h1>
+    <p v-if="org">You're in <strong>{{ org.name }}</strong> as <strong>{{ role }}</strong>.</p>
+    <UAlert v-else color="warning" title="No organization yet" description="Ask a director to invite you, or run scripts/seed-director.ts to create one." />
+  </AppShell>
+</template>
 ```
-Expected: no errors.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add layers/core/pages/settings/index.vue
+git add .
+git commit -m "feat(core): add AppShell + dashboard"
+```
+
+---
+
+## Task 21: Functions package scaffold
+
+**Files:**
+- Create: `functions/package.json`, `functions/tsconfig.json`, `functions/vitest.config.ts`, `functions/src/index.ts`
+
+- [ ] **Step 1: Create `functions/package.json`**
+
+```json
+{
+  "name": "festivalmgr-functions",
+  "version": "0.0.1",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "pnpm build && firebase emulators:start --only functions",
+    "shell": "pnpm build && firebase functions:shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.4.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
+```
+
+- [ ] **Step 2: Create `functions/tsconfig.json`**
+
+```json
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "noImplicitReturns": true,
+    "outDir": "lib",
+    "sourceMap": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/test/**/*"]
+}
+```
+
+- [ ] **Step 3: Create `functions/vitest.config.ts`**
+
+```ts
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+    globals: true,
+    include: ['src/test/**/*.test.ts'],
+  },
+})
+```
+
+- [ ] **Step 4: Create `functions/src/index.ts` (re-exports)**
+
+```ts
+export { setMembership }    from './core/setMembership'
+export { revokeMembership } from './core/revokeMembership'
+export { claimMembership }  from './core/claimMembership'
+```
+
+- [ ] **Step 5: Install function deps**
+
+```bash
+pnpm --filter ./functions install
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .
+git commit -m "chore(functions): scaffold functions package"
+```
+
+---
+
+## Task 22: Functions helpers — caller-role assertions
+
+**Files:**
+- Create: `functions/src/core/helpers.ts`
+
+- [ ] **Step 1: Implement**
+
+```ts
+// functions/src/core/helpers.ts
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
+
+export type Role = 'director' | 'booker' | 'production' | 'finance' | 'pr' | 'crew'
+
+export function assertSignedIn(req: CallableRequest): asserts req is CallableRequest & { auth: NonNullable<CallableRequest['auth']> } {
+  if (!req.auth) {
+    throw new HttpsError('unauthenticated', 'Sign-in required.')
+  }
+}
+
+export function assertCallerHasRoleInOrg(
+  req: CallableRequest,
+  orgId: string,
+  allowedRoles: Role[],
+): void {
+  assertSignedIn(req)
+  const claims = req.auth.token as { orgId?: string; role?: Role }
+  if (claims.orgId !== orgId || !claims.role || !allowedRoles.includes(claims.role)) {
+    throw new HttpsError('permission-denied', `Required role(s): ${allowedRoles.join(', ')}.`)
+  }
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .
+git commit -m "feat(functions): add caller-role assertion helpers"
+```
+
+---
+
+## Task 23: `setMembership` callable + test
+
+**Files:**
+- Create: `functions/src/core/setMembership.ts`
+- Create: `functions/src/test/setup.ts`, `functions/src/test/setMembership.test.ts`
+
+The callable creates a `pending` membership for a given email. The director must already be a director of the target org.
+
+- [ ] **Step 1: Implement `functions/src/test/setup.ts`**
+
+```ts
+// functions/src/test/setup.ts
+import functionsTest from 'firebase-functions-test'
+
+export const test = functionsTest()
+
+afterAll(() => test.cleanup())
+```
+
+- [ ] **Step 2: Write the failing test**
+
+```ts
+// functions/src/test/setMembership.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { test } from './setup'
+
+const set = vi.fn(async () => undefined)
+const docRef = { id: 'mem123', set }
+const collectionRef = { doc: vi.fn(() => docRef) }
+
+vi.mock('firebase-admin/app', () => ({ initializeApp: vi.fn(() => ({})), getApps: () => [] }))
+vi.mock('firebase-admin/firestore', () => ({
+  getFirestore: () => ({
+    collection: vi.fn(() => collectionRef),
+  }),
+  FieldValue: { serverTimestamp: () => '__SERVER_TS__' },
+}))
+
+import { setMembership } from '../core/setMembership'
+
+describe('setMembership', () => {
+  beforeEach(() => { set.mockClear(); collectionRef.doc.mockClear() })
+
+  it('rejects non-directors', async () => {
+    const wrapped = test.wrap(setMembership)
+    await expect(wrapped({
+      data: { orgId: 'lila', email: 'a@b.c', role: 'booker' },
+      auth: { uid: 'caller', token: { orgId: 'lila', role: 'booker' } },
+    } as never)).rejects.toThrow(/permission-denied/)
+  })
+
+  it('writes a pending membership doc when caller is director', async () => {
+    const wrapped = test.wrap(setMembership)
+    const result = await wrapped({
+      data: { orgId: 'lila', email: 'newbie@example.com', role: 'production' },
+      auth: { uid: 'director', token: { orgId: 'lila', role: 'director' } },
+    } as never)
+    expect(result).toEqual({ membershipId: 'mem123' })
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'newbie@example.com',
+      role: 'production',
+      status: 'pending',
+      invitedBy: 'director',
+    }))
+  })
+})
+```
+
+- [ ] **Step 3: Verify test fails**
+
+```bash
+pnpm --filter ./functions test
+```
+
+Expected: FAIL — module not found.
+
+- [ ] **Step 4: Implement `setMembership`**
+
+```ts
+// functions/src/core/setMembership.ts
+import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { getApps, initializeApp } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { assertCallerHasRoleInOrg, type Role } from './helpers'
+
+if (!getApps().length) initializeApp()
+
+type Data = { orgId: string; email: string; role: Role }
+
+export const setMembership = onCall<Data>(async (req) => {
+  const { orgId, email, role } = req.data ?? ({} as Data)
+  if (!orgId || !email || !role) {
+    throw new HttpsError('invalid-argument', 'orgId, email and role are required.')
+  }
+  assertCallerHasRoleInOrg(req, orgId, ['director'])
+
+  const db = getFirestore()
+  const ref = db.collection(`organizations/${orgId}/memberships`).doc()
+  await ref.set({
+    userId: null,
+    email: email.trim().toLowerCase(),
+    role,
+    invitedBy: req.auth!.uid,
+    invitedAt: FieldValue.serverTimestamp(),
+    acceptedAt: null,
+    status: 'pending',
+  })
+  return { membershipId: ref.id }
+})
+```
+
+- [ ] **Step 5: Verify test passes**
+
+```bash
+pnpm --filter ./functions test
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .
+git commit -m "feat(functions): add setMembership callable"
+```
+
+---
+
+## Task 24: `revokeMembership` callable + test
+
+**Files:**
+- Create: `functions/src/core/revokeMembership.ts`, `functions/src/test/revokeMembership.test.ts`
+
+Director-only. Flips an existing membership to `status: 'revoked'` and clears the user's custom claim if the membership was active.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// functions/src/test/revokeMembership.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { test } from './setup'
+
+const update = vi.fn(async () => undefined)
+const docSnap = { exists: true, data: () => ({ userId: 'u-target', status: 'active' }) }
+const docRef = { get: vi.fn(async () => docSnap), update }
+const setCustomUserClaims = vi.fn(async () => undefined)
+
+vi.mock('firebase-admin/app', () => ({ initializeApp: vi.fn(() => ({})), getApps: () => [] }))
+vi.mock('firebase-admin/firestore', () => ({
+  getFirestore: () => ({ doc: vi.fn(() => docRef) }),
+  FieldValue: { serverTimestamp: () => '__SERVER_TS__' },
+}))
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({ setCustomUserClaims }),
+}))
+
+import { revokeMembership } from '../core/revokeMembership'
+
+describe('revokeMembership', () => {
+  beforeEach(() => { update.mockClear(); setCustomUserClaims.mockClear() })
+
+  it('rejects non-directors', async () => {
+    const wrapped = test.wrap(revokeMembership)
+    await expect(wrapped({
+      data: { orgId: 'lila', membershipId: 'm1' },
+      auth: { uid: 'caller', token: { orgId: 'lila', role: 'pr' } },
+    } as never)).rejects.toThrow(/permission-denied/)
+  })
+
+  it('marks revoked + clears claims for the affected user', async () => {
+    const wrapped = test.wrap(revokeMembership)
+    await wrapped({
+      data: { orgId: 'lila', membershipId: 'm1' },
+      auth: { uid: 'director', token: { orgId: 'lila', role: 'director' } },
+    } as never)
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: 'revoked' }))
+    expect(setCustomUserClaims).toHaveBeenCalledWith('u-target', null)
+  })
+})
+```
+
+- [ ] **Step 2: Verify test fails**
+
+```bash
+pnpm --filter ./functions test
+```
+
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement**
+
+```ts
+// functions/src/core/revokeMembership.ts
+import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { getApps, initializeApp } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
+import { assertCallerHasRoleInOrg } from './helpers'
+
+if (!getApps().length) initializeApp()
+
+type Data = { orgId: string; membershipId: string }
+
+export const revokeMembership = onCall<Data>(async (req) => {
+  const { orgId, membershipId } = req.data ?? ({} as Data)
+  if (!orgId || !membershipId) {
+    throw new HttpsError('invalid-argument', 'orgId and membershipId are required.')
+  }
+  assertCallerHasRoleInOrg(req, orgId, ['director'])
+
+  const db = getFirestore()
+  const ref = db.doc(`organizations/${orgId}/memberships/${membershipId}`)
+  const snap = await ref.get()
+  if (!snap.exists) {
+    throw new HttpsError('not-found', 'Membership not found.')
+  }
+  const m = snap.data() as { userId: string | null; status: string }
+
+  await ref.update({
+    status: 'revoked',
+    revokedAt: FieldValue.serverTimestamp(),
+  })
+  if (m.userId && m.status === 'active') {
+    await getAuth().setCustomUserClaims(m.userId, null)
+  }
+  return { ok: true as const }
+})
+```
+
+- [ ] **Step 4: Verify test passes**
+
+```bash
+pnpm --filter ./functions test
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .
+git commit -m "feat(functions): add revokeMembership callable"
+```
+
+---
+
+## Task 25: `claimMembership` callable + test
+
+**Files:**
+- Create: `functions/src/core/claimMembership.ts`, `functions/src/test/claimMembership.test.ts`
+
+Invoked by the client right after sign-in. Looks up pending memberships matching the user's email, flips them to `active`, sets `userId`, writes the custom claim (`orgId`, `role`), and creates / updates the `/users/{uid}` doc.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// functions/src/test/claimMembership.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { test } from './setup'
+
+const updateMembership = vi.fn(async () => undefined)
+const setCustomUserClaims = vi.fn(async () => undefined)
+const userDocRef = {
+  set: vi.fn(async () => undefined),
+  update: vi.fn(async () => undefined),
+  get: vi.fn(async () => ({ exists: false })),
+}
+
+vi.mock('firebase-admin/app', () => ({ initializeApp: vi.fn(() => ({})), getApps: () => [] }))
+vi.mock('firebase-admin/firestore', () => ({
+  getFirestore: () => ({
+    collectionGroup: vi.fn(() => ({
+      where: vi.fn(() => ({
+        where: vi.fn(() => ({
+          get: vi.fn(async () => ({
+            docs: [
+              {
+                ref: { update: updateMembership, parent: { parent: { id: 'lila' } } },
+                data: () => ({ email: 'invitee@example.com', role: 'production', status: 'pending' }),
+              },
+            ],
+          })),
+        })),
+      })),
+    })),
+    doc: vi.fn(() => userDocRef),
+  }),
+  FieldValue: {
+    serverTimestamp: () => '__SERVER_TS__',
+    arrayUnion: (...x: string[]) => ({ arrayUnion: x }),
+  },
+}))
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({ setCustomUserClaims }),
+}))
+
+import { claimMembership } from '../core/claimMembership'
+
+describe('claimMembership', () => {
+  beforeEach(() => {
+    updateMembership.mockClear()
+    setCustomUserClaims.mockClear()
+    userDocRef.set.mockClear()
+  })
+
+  it('activates pending memberships for caller email and sets claims', async () => {
+    const wrapped = test.wrap(claimMembership)
+    const result = await wrapped({
+      data: {},
+      auth: { uid: 'u-invitee', token: { email: 'invitee@example.com' } },
+    } as never)
+    expect(result.activatedOrgIds).toEqual(['lila'])
+    expect(updateMembership).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'u-invitee',
+      status: 'active',
+    }))
+    expect(setCustomUserClaims).toHaveBeenCalledWith('u-invitee', expect.objectContaining({
+      orgId: 'lila',
+      role: 'production',
+    }))
+    expect(userDocRef.set).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'invitee@example.com',
+      orgIds: ['lila'],
+    }))
+  })
+})
+```
+
+- [ ] **Step 2: Verify test fails**
+
+```bash
+pnpm --filter ./functions test
+```
+
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement**
+
+```ts
+// functions/src/core/claimMembership.ts
+import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { getApps, initializeApp } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
+
+if (!getApps().length) initializeApp()
+
+export const claimMembership = onCall(async (req) => {
+  if (!req.auth) {
+    throw new HttpsError('unauthenticated', 'Sign-in required.')
+  }
+  const uid = req.auth.uid
+  const email = String(req.auth.token.email ?? '').toLowerCase()
+  if (!email) {
+    return { activatedOrgIds: [] as string[] }
+  }
+
+  const db = getFirestore()
+  const snap = await db
+    .collectionGroup('memberships')
+    .where('email', '==', email)
+    .where('status', '==', 'pending')
+    .get()
+
+  const activatedOrgIds: string[] = []
+  let primary: { orgId: string; role: string } | null = null
+
+  for (const doc of snap.docs) {
+    const orgId = doc.ref.parent.parent!.id
+    const role = (doc.data() as { role: string }).role
+    await doc.ref.update({
+      userId: uid,
+      status: 'active',
+      acceptedAt: FieldValue.serverTimestamp(),
+    })
+    activatedOrgIds.push(orgId)
+    if (!primary) primary = { orgId, role }
+  }
+
+  if (primary) {
+    await getAuth().setCustomUserClaims(uid, {
+      orgId: primary.orgId,
+      role: primary.role,
+      orgs: Object.fromEntries(activatedOrgIds.map((o, i) => [o, i === 0 ? primary!.role : 'crew'])),
+    })
+
+    const userRef = db.doc(`users/${uid}`)
+    const u = await userRef.get()
+    if (u.exists) {
+      await userRef.update({ orgIds: FieldValue.arrayUnion(...activatedOrgIds) })
+    }
+    else {
+      await userRef.set({
+        email,
+        displayName: req.auth.token.name ?? email,
+        photoURL: req.auth.token.picture ?? null,
+        orgIds: activatedOrgIds,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+    }
+  }
+
+  return { activatedOrgIds }
+})
+```
+
+- [ ] **Step 4: Verify test passes**
+
+```bash
+pnpm --filter ./functions test
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .
+git commit -m "feat(functions): add claimMembership callable"
+```
+
+---
+
+## Task 26: Settings index page (org settings)
+
+**Files:**
+- Create: `layers/core/app/pages/settings/index.vue`
+
+Director-only edit; everyone in the org can read. Updates a small allow-list of fields (`name`, `defaultLocale`, `defaultCurrency`, `enabledModules`).
+
+- [ ] **Step 1: Implement**
+
+```vue
+<!-- layers/core/app/pages/settings/index.vue -->
+<script setup lang="ts">
+import { useFirestore } from 'vuefire'
+import { doc, updateDoc } from 'firebase/firestore'
+import type { ModuleKey } from '#layers/core/shared/types'
+
+const { org, orgId, role } = await useOrg()
+const db = useFirestore()
+const toast = useToast()
+
+const editable = reactive({
+  name: org.value?.name ?? '',
+  defaultLocale: org.value?.defaultLocale ?? 'en',
+  defaultCurrency: org.value?.defaultCurrency ?? 'CHF',
+  enabledModules: [...(org.value?.enabledModules ?? [])] as ModuleKey[],
+})
+
+const allModules: ModuleKey[] = ['artists', 'budget', 'booking', 'riders', 'schedule']
+const canEdit = computed(() => role.value === 'director')
+
+async function save() {
+  if (!orgId.value) return
+  await updateDoc(doc(db, 'organizations', orgId.value), {
+    name: editable.name,
+    defaultLocale: editable.defaultLocale,
+    defaultCurrency: editable.defaultCurrency,
+    enabledModules: editable.enabledModules,
+  })
+  toast.add({ title: 'Settings saved', color: 'success' })
+}
+</script>
+
+<template>
+  <AppShell>
+    <h1 class="text-2xl font-semibold mb-6">Organization settings</h1>
+
+    <UCard v-if="org" class="max-w-xl">
+      <form class="space-y-4" @submit.prevent="save">
+        <UFormField label="Name" name="name">
+          <UInput v-model="editable.name" :disabled="!canEdit" />
+        </UFormField>
+        <UFormField label="Default locale" name="defaultLocale">
+          <UInput v-model="editable.defaultLocale" :disabled="!canEdit" />
+        </UFormField>
+        <UFormField label="Default currency" name="defaultCurrency">
+          <UInput v-model="editable.defaultCurrency" :disabled="!canEdit" />
+        </UFormField>
+        <UFormField label="Enabled modules" name="enabledModules">
+          <div class="flex flex-wrap gap-2">
+            <UCheckbox
+              v-for="m in allModules"
+              :key="m"
+              :model-value="editable.enabledModules.includes(m)"
+              :disabled="!canEdit"
+              :label="m"
+              @update:model-value="(checked: boolean) => editable.enabledModules = checked
+                ? [...editable.enabledModules, m]
+                : editable.enabledModules.filter(x => x !== m)" />
+          </div>
+        </UFormField>
+        <UButton v-if="canEdit" type="submit">Save</UButton>
+      </form>
+    </UCard>
+    <UAlert v-else color="warning" title="No organization on this account" />
+  </AppShell>
+</template>
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .
 git commit -m "feat(core): add org settings page"
 ```
 
 ---
 
-## Task 17: Build member admin page (list, invite, revoke)
+## Task 27: Member admin page
 
 **Files:**
-- Create: `layers/core/pages/settings/members.vue`, `layers/core/components/MemberRow.vue`
+- Create: `layers/core/app/pages/settings/members.vue`, `layers/core/app/components/MemberRow.vue`
 
-- [ ] **Step 1: Write `MemberRow.vue`**
-
-```vue
-<!-- layers/core/components/MemberRow.vue -->
-<script setup lang="ts">
-import type { Membership, Role } from '../types'
-
-defineProps<{ member: Membership & { id: string }; canRevoke: boolean }>()
-defineEmits<{ revoke: [id: string] }>()
-</script>
-
-<template>
-  <li class="flex items-center justify-between py-3 border-b border-default-200">
-    <div>
-      <div class="font-medium">{{ member.userId }}</div>
-      <div class="text-sm text-default-500">{{ member.role }} — {{ member.status }}</div>
-    </div>
-    <UButton
-      v-if="canRevoke && member.status !== 'revoked'"
-      size="sm" color="error" variant="ghost"
-      @click="$emit('revoke', member.id)"
-    >Revoke</UButton>
-  </li>
-</template>
-```
-
-- [ ] **Step 2: Write the members page**
+- [ ] **Step 1: Implement `MemberRow.vue`**
 
 ```vue
-<!-- layers/core/pages/settings/members.vue -->
+<!-- layers/core/app/components/MemberRow.vue -->
 <script setup lang="ts">
-import type { Role } from '~/types'
+import type { Membership, Role } from '#layers/core/shared/types'
 
-const { user } = useUser()
-const { t } = useI18n()
-const claim = await user.value?.getIdTokenResult()
-const orgId = claim?.claims.orgId as string | undefined
-if (!orgId) throw createError({ statusCode: 403, statusMessage: 'No org' })
-const isDirector = claim?.claims.role === 'director'
+const props = defineProps<{
+  membership: Membership & { id: string }
+  canRevoke: boolean
+}>()
+const emit = defineEmits<{ revoke: [id: string] }>()
 
-const { members, subscribe, invite, revoke } = useMembership(orgId)
-let stop: (() => void) | undefined
-onMounted(() => { stop = subscribe() })
-onBeforeUnmount(() => stop?.())
-
-const newEmail = ref('')
-const newRole = ref<Role>('booker')
-const error = ref<string | null>(null)
-const busy = ref(false)
-
-async function inviteMember() {
-  error.value = null
-  busy.value = true
-  try {
-    await invite({ email: newEmail.value, role: newRole.value })
-    newEmail.value = ''
-  } catch (e) {
-    error.value = (e as Error).message
-  } finally {
-    busy.value = false
-  }
+const roleColor: Record<Role, string> = {
+  director: 'primary', booker: 'info', production: 'success',
+  finance: 'warning', pr: 'secondary', crew: 'neutral',
 }
-
-const roleOptions: { value: Role; label: string }[] = [
-  { value: 'director', label: 'Director' },
-  { value: 'booker', label: 'Booker' },
-  { value: 'production', label: 'Production' },
-  { value: 'finance', label: 'Finance' },
-  { value: 'pr', label: 'PR' },
-  { value: 'crew', label: 'Crew' },
-]
+const statusColor: Record<Membership['status'], string> = {
+  active: 'success', pending: 'warning', revoked: 'neutral',
+}
 </script>
 
 <template>
-  <div class="min-h-screen p-8 max-w-3xl mx-auto">
-    <h1 class="text-2xl font-semibold mb-6">{{ t('members.title') }}</h1>
-
-    <section v-if="isDirector" class="mb-8">
-      <h2 class="font-medium mb-3">{{ t('members.inviteHeading') }}</h2>
-      <UAlert v-if="error" color="error" :description="error" class="mb-3" />
-      <form class="flex gap-2 items-end" @submit.prevent="inviteMember">
-        <UFormField :label="t('members.emailLabel')" class="flex-1">
-          <UInput v-model="newEmail" type="email" required class="w-full" />
-        </UFormField>
-        <UFormField :label="t('members.roleLabel')">
-          <USelect v-model="newRole" :items="roleOptions" />
-        </UFormField>
-        <UButton type="submit" :loading="busy">{{ t('members.inviteSubmit') }}</UButton>
-      </form>
-    </section>
-
-    <ul>
-      <MemberRow
-        v-for="m in members" :key="m.id"
-        :member="m"
-        :can-revoke="!!isDirector"
-        @revoke="revoke($event)"
-      />
-    </ul>
+  <div class="flex items-center gap-3 py-2 border-b border-default last:border-0">
+    <div class="flex-1">
+      <div class="font-medium">{{ props.membership.email }}</div>
+      <div class="text-xs text-muted">{{ props.membership.userId ?? '—' }}</div>
+    </div>
+    <UBadge :color="roleColor[props.membership.role]" variant="subtle">{{ props.membership.role }}</UBadge>
+    <UBadge :color="statusColor[props.membership.status]" variant="subtle">{{ props.membership.status }}</UBadge>
+    <UButton
+      v-if="props.canRevoke && props.membership.status !== 'revoked'"
+      size="xs"
+      color="error"
+      variant="ghost"
+      @click="emit('revoke', props.membership.id)">
+      Revoke
+    </UButton>
   </div>
 </template>
 ```
 
-- [ ] **Step 3: Verify compile**
+- [ ] **Step 2: Implement `members.vue`**
 
-```bash
-pnpm exec nuxt prepare
+```vue
+<!-- layers/core/app/pages/settings/members.vue -->
+<script setup lang="ts">
+import type { Role } from '#layers/core/shared/types'
+
+const { orgId, role } = await useOrg()
+const fns = useFunctions()
+const toast = useToast()
+
+const memberships = orgId.value ? useMemberships(orgId.value) : ref([])
+const canManage = computed(() => role.value === 'director')
+
+const inviteEmail = ref('')
+const inviteRole = ref<Role>('crew')
+const submitting = ref(false)
+
+async function invite() {
+  if (!orgId.value || !inviteEmail.value) return
+  submitting.value = true
+  try {
+    await fns.setMembership({
+      orgId: orgId.value,
+      email: inviteEmail.value,
+      role: inviteRole.value,
+    })
+    toast.add({ title: 'Invite sent', color: 'success' })
+    inviteEmail.value = ''
+  }
+  catch (e: unknown) {
+    toast.add({ title: 'Invite failed', description: (e as Error)?.message, color: 'error' })
+  }
+  finally {
+    submitting.value = false
+  }
+}
+
+async function revoke(membershipId: string) {
+  if (!orgId.value) return
+  try {
+    await fns.revokeMembership({ orgId: orgId.value, membershipId })
+    toast.add({ title: 'Revoked', color: 'success' })
+  }
+  catch (e: unknown) {
+    toast.add({ title: 'Revoke failed', description: (e as Error)?.message, color: 'error' })
+  }
+}
+
+const roleOptions: Role[] = ['director', 'booker', 'production', 'finance', 'pr', 'crew']
+</script>
+
+<template>
+  <AppShell>
+    <h1 class="text-2xl font-semibold mb-6">Members</h1>
+
+    <UCard v-if="canManage" class="mb-6">
+      <template #header>
+        <h2 class="font-medium">Invite teammate</h2>
+      </template>
+      <form class="flex gap-2 items-end" @submit.prevent="invite">
+        <UFormField label="Email" class="flex-1">
+          <UInput v-model="inviteEmail" type="email" required />
+        </UFormField>
+        <UFormField label="Role">
+          <USelect v-model="inviteRole" :items="roleOptions" />
+        </UFormField>
+        <UButton type="submit" :loading="submitting">Invite</UButton>
+      </form>
+    </UCard>
+
+    <UCard>
+      <MemberRow
+        v-for="m in memberships"
+        :key="m.id"
+        :membership="m"
+        :can-revoke="canManage"
+        @revoke="revoke" />
+      <p v-if="memberships.length === 0" class="text-sm text-muted">No members yet.</p>
+    </UCard>
+  </AppShell>
+</template>
 ```
-Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add layers/core/pages/settings/members.vue layers/core/components/MemberRow.vue
-git commit -m "feat(core): add member admin page"
+git add .
+git commit -m "feat(core): add member admin page + row component"
 ```
 
 ---
 
-## Task 18: Build event list + create page
+## Task 28: Events index page
 
 **Files:**
-- Create: `layers/core/pages/events/index.vue`, `layers/core/components/EventCard.vue`
+- Create: `layers/core/app/pages/events/index.vue`, `layers/core/app/components/EventCard.vue`
 
-- [ ] **Step 1: Write `EventCard.vue`**
+- [ ] **Step 1: Implement `EventCard.vue`**
 
 ```vue
-<!-- layers/core/components/EventCard.vue -->
+<!-- layers/core/app/components/EventCard.vue -->
 <script setup lang="ts">
-import type { Event } from '../types'
-defineProps<{ event: Event & { id: string } }>()
+import type { Event } from '#layers/core/shared/types'
+const props = defineProps<{ event: Event & { id: string } }>()
+const dateRange = computed(() => {
+  const s = props.event.dates.start.toDate()
+  const e = props.event.dates.end.toDate()
+  return `${s.toLocaleDateString()} – ${e.toLocaleDateString()}`
+})
 </script>
 
 <template>
-  <UCard>
-    <NuxtLink :to="`/events/${event.id}`">
-      <h3 class="font-medium">{{ event.name }}</h3>
-      <p class="text-sm text-default-500">
-        {{ event.dates.start.toDate().toLocaleDateString() }} —
-        {{ event.dates.end.toDate().toLocaleDateString() }}
-      </p>
-      <p class="text-xs text-default-400">{{ event.status }}</p>
-    </NuxtLink>
-  </UCard>
+  <NuxtLink :to="`/events/${props.event.id}`">
+    <UCard class="hover:bg-elevated transition-colors">
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="font-medium">{{ props.event.name }}</div>
+          <div class="text-xs text-muted">{{ dateRange }}</div>
+        </div>
+        <UBadge variant="subtle">{{ props.event.status }}</UBadge>
+      </div>
+    </UCard>
+  </NuxtLink>
 </template>
 ```
 
-- [ ] **Step 2: Write the event list page**
+- [ ] **Step 2: Implement `events/index.vue`**
 
 ```vue
-<!-- layers/core/pages/events/index.vue -->
+<!-- layers/core/app/pages/events/index.vue -->
 <script setup lang="ts">
-const { user } = useUser()
-const { t } = useI18n()
-const claim = await user.value?.getIdTokenResult()
-const orgId = claim?.claims.orgId as string | undefined
-if (!orgId) throw createError({ statusCode: 403, statusMessage: 'No org' })
+import { useFirestore } from 'vuefire'
+import { addDoc, collection, Timestamp } from 'firebase/firestore'
 
-const { events, subscribe, createEvent } = useEvent(orgId)
-let stop: (() => void) | undefined
-onMounted(() => { stop = subscribe() })
-onBeforeUnmount(() => stop?.())
+const { orgId, role } = await useOrg()
+const db = useFirestore()
+const events = orgId.value ? useEvents(orgId.value) : ref([])
+const canCreate = computed(() => role.value === 'director')
 
-const showCreate = ref(false)
+const open = ref(false)
 const draft = reactive({ name: '', slug: '', start: '', end: '' })
-const busy = ref(false)
-const error = ref<string | null>(null)
 
-async function submitCreate() {
-  error.value = null
-  busy.value = true
-  try {
-    await createEvent({
-      name: draft.name,
-      slug: draft.slug,
-      start: new Date(draft.start),
-      end: new Date(draft.end),
-    })
-    showCreate.value = false
-    Object.assign(draft, { name: '', slug: '', start: '', end: '' })
-  } catch (e) {
-    error.value = (e as Error).message
-  } finally {
-    busy.value = false
-  }
+async function create() {
+  if (!orgId.value) return
+  await addDoc(collection(db, 'organizations', orgId.value, 'events'), {
+    name: draft.name,
+    slug: draft.slug,
+    primaryLocale: 'en',
+    primaryContacts: [],
+    status: 'planning',
+    dates: {
+      start: Timestamp.fromDate(new Date(draft.start)),
+      end: Timestamp.fromDate(new Date(draft.end)),
+    },
+    publishToPublic: false,
+    createdAt: Timestamp.now(),
+    deletedAt: null,
+  })
+  open.value = false
+  Object.assign(draft, { name: '', slug: '', start: '', end: '' })
 }
 </script>
 
 <template>
-  <div class="min-h-screen p-8 max-w-4xl mx-auto">
-    <header class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-semibold">{{ t('events.title') }}</h1>
-      <UButton @click="showCreate = true">{{ t('events.createButton') }}</UButton>
-    </header>
+  <AppShell>
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-semibold">Events</h1>
+      <UButton v-if="canCreate" icon="i-lucide-plus" @click="open = true">New event</UButton>
+    </div>
 
-    <UModal v-model:open="showCreate">
-      <template #content>
-        <UCard>
-          <UAlert v-if="error" color="error" :description="error" class="mb-3" />
-          <form class="space-y-3" @submit.prevent="submitCreate">
-            <UFormField :label="t('events.nameLabel')">
-              <UInput v-model="draft.name" required class="w-full" />
-            </UFormField>
-            <UFormField :label="t('events.slugLabel')">
-              <UInput v-model="draft.slug" required pattern="[a-z0-9-]+" class="w-full" />
-            </UFormField>
-            <UFormField :label="t('events.startLabel')">
-              <UInput v-model="draft.start" type="date" required class="w-full" />
-            </UFormField>
-            <UFormField :label="t('events.endLabel')">
-              <UInput v-model="draft.end" type="date" required class="w-full" />
-            </UFormField>
-            <UButton type="submit" :loading="busy">{{ t('events.save') }}</UButton>
-          </form>
-        </UCard>
+    <div class="grid gap-3">
+      <EventCard v-for="e in events" :key="e.id" :event="e" />
+      <UAlert v-if="events.length === 0" color="neutral" title="No events yet" />
+    </div>
+
+    <UModal v-model:open="open" title="New event">
+      <template #body>
+        <form class="space-y-3" @submit.prevent="create">
+          <UFormField label="Name"><UInput v-model="draft.name" required /></UFormField>
+          <UFormField label="Slug"><UInput v-model="draft.slug" required /></UFormField>
+          <UFormField label="Start date"><UInput v-model="draft.start" type="date" required /></UFormField>
+          <UFormField label="End date"><UInput v-model="draft.end" type="date" required /></UFormField>
+          <UButton type="submit">Create</UButton>
+        </form>
       </template>
     </UModal>
-
-    <div class="grid gap-3 sm:grid-cols-2">
-      <EventCard v-for="e in events" :key="e.id" :event="e" />
-    </div>
-  </div>
+  </AppShell>
 </template>
 ```
 
-- [ ] **Step 3: Verify compile**
+- [ ] **Step 3: Commit**
 
 ```bash
-pnpm exec nuxt prepare
-```
-Expected: no errors.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add layers/core/pages/events/index.vue layers/core/components/EventCard.vue
-git commit -m "feat(core): add event list and create page"
+git add .
+git commit -m "feat(core): add events index + card component"
 ```
 
 ---
 
-## Task 19: Build event detail page with location CRUD
+## Task 29: Event detail page (with locations CRUD)
 
 **Files:**
-- Create: `layers/core/pages/events/[id].vue`, `layers/core/components/LocationListItem.vue`
+- Create: `layers/core/app/pages/events/[eventId].vue`, `layers/core/app/components/LocationListItem.vue`
 
-- [ ] **Step 1: Write `LocationListItem.vue`**
+- [ ] **Step 1: Implement `LocationListItem.vue`**
 
 ```vue
-<!-- layers/core/components/LocationListItem.vue -->
+<!-- layers/core/app/components/LocationListItem.vue -->
 <script setup lang="ts">
-import type { Location } from '../types'
-defineProps<{ location: Location & { id: string } }>()
-defineEmits<{ remove: [id: string] }>()
+import type { Location } from '#layers/core/shared/types'
+const props = defineProps<{
+  location: Location & { id: string }
+  canEdit: boolean
+}>()
+const emit = defineEmits<{ remove: [id: string] }>()
 </script>
 
 <template>
-  <li class="flex items-center justify-between py-3 border-b border-default-200">
-    <div>
-      <div class="font-medium">{{ location.name }}</div>
-      <div v-if="location.capacity" class="text-sm text-default-500">cap. {{ location.capacity }}</div>
+  <div class="flex items-center gap-3 py-2 border-b border-default last:border-0">
+    <span class="font-mono text-xs w-6 text-muted">{{ props.location.order }}</span>
+    <div class="flex-1">
+      <div class="font-medium">{{ props.location.name }}</div>
+      <div v-if="props.location.capacity" class="text-xs text-muted">Capacity: {{ props.location.capacity }}</div>
     </div>
-    <UButton size="sm" color="error" variant="ghost" @click="$emit('remove', location.id)">Delete</UButton>
-  </li>
+    <UButton v-if="props.canEdit" size="xs" variant="ghost" color="error" @click="emit('remove', props.location.id)">Remove</UButton>
+  </div>
 </template>
 ```
 
-- [ ] **Step 2: Write the event detail page**
+- [ ] **Step 2: Implement `[eventId].vue`**
 
 ```vue
-<!-- layers/core/pages/events/[id].vue -->
+<!-- layers/core/app/pages/events/[eventId].vue -->
 <script setup lang="ts">
+import { useFirestore } from 'vuefire'
+import { addDoc, collection, deleteDoc, doc } from 'firebase/firestore'
+
 const route = useRoute()
-const { user } = useUser()
-const { t } = useI18n()
-const claim = await user.value?.getIdTokenResult()
-const orgId = claim?.claims.orgId as string | undefined
-if (!orgId) throw createError({ statusCode: 403, statusMessage: 'No org' })
+const eventId = route.params.eventId as string
+const { orgId, role } = await useOrg()
+const db = useFirestore()
 
-const eventId = route.params.id as string
-const { events, subscribe: subEvents } = useEvent(orgId)
-const { locations, subscribe: subLocs, createLocation, removeLocation } = useLocation(orgId, eventId)
+if (!orgId.value) throw createError({ statusCode: 403, message: 'No organization on this account' })
 
-let stops: (() => void)[] = []
-onMounted(() => { stops = [subEvents(), subLocs()] })
-onBeforeUnmount(() => stops.forEach((s) => s()))
+const event = useEvent(orgId.value, eventId)
+const locations = useLocations(orgId.value, eventId)
+const canEdit = computed(() => role.value === 'director' || role.value === 'production')
 
-const event = computed(() => events.value.find((e) => e.id === eventId))
+const draft = reactive({ name: '', capacity: undefined as number | undefined })
 
-const newLoc = reactive({ name: '', capacity: '' })
-const busy = ref(false)
 async function addLocation() {
-  busy.value = true
-  try {
-    await createLocation({
-      name: newLoc.name,
-      capacity: newLoc.capacity ? Number(newLoc.capacity) : undefined,
-      order: locations.value.length,
-    })
-    newLoc.name = ''
-    newLoc.capacity = ''
-  } finally { busy.value = false }
+  if (!orgId.value || !draft.name) return
+  await addDoc(collection(db, 'organizations', orgId.value, 'events', eventId, 'locations'), {
+    name: draft.name,
+    capacity: draft.capacity ?? null,
+    order: locations.value.length + 1,
+  })
+  draft.name = ''
+  draft.capacity = undefined
+}
+
+async function removeLocation(id: string) {
+  if (!orgId.value) return
+  await deleteDoc(doc(db, 'organizations', orgId.value, 'events', eventId, 'locations', id))
 }
 </script>
 
 <template>
-  <div class="min-h-screen p-8 max-w-3xl mx-auto">
-    <header v-if="event" class="mb-8">
-      <h1 class="text-2xl font-semibold">{{ event.name }}</h1>
-      <p class="text-default-500">
-        {{ event.dates.start.toDate().toLocaleDateString() }} —
-        {{ event.dates.end.toDate().toLocaleDateString() }}
-      </p>
-    </header>
+  <AppShell>
+    <NuxtLink to="/events" class="text-sm text-muted hover:underline">← All events</NuxtLink>
+    <h1 v-if="event" class="text-2xl font-semibold mb-6">{{ event.name }}</h1>
 
-    <section>
-      <h2 class="text-lg font-medium mb-3">{{ t('locations.title') }}</h2>
-      <form class="flex gap-2 items-end mb-6" @submit.prevent="addLocation">
-        <UFormField :label="t('locations.nameLabel')" class="flex-1">
-          <UInput v-model="newLoc.name" required class="w-full" />
-        </UFormField>
-        <UFormField :label="t('locations.capacityLabel')">
-          <UInput v-model="newLoc.capacity" type="number" min="0" class="w-32" />
-        </UFormField>
-        <UButton type="submit" :loading="busy">{{ t('locations.save') }}</UButton>
+    <UCard>
+      <template #header><h2 class="font-medium">Locations</h2></template>
+
+      <LocationListItem
+        v-for="l in locations"
+        :key="l.id"
+        :location="l"
+        :can-edit="canEdit"
+        @remove="removeLocation" />
+      <p v-if="locations.length === 0" class="text-sm text-muted">No locations yet.</p>
+
+      <form v-if="canEdit" class="flex gap-2 items-end mt-4" @submit.prevent="addLocation">
+        <UFormField label="Name" class="flex-1"><UInput v-model="draft.name" required /></UFormField>
+        <UFormField label="Capacity"><UInput v-model.number="draft.capacity" type="number" min="0" /></UFormField>
+        <UButton type="submit">Add</UButton>
       </form>
-
-      <ul>
-        <LocationListItem
-          v-for="loc in locations" :key="loc.id"
-          :location="loc"
-          @remove="removeLocation($event)"
-        />
-      </ul>
-    </section>
-  </div>
+    </UCard>
+  </AppShell>
 </template>
 ```
 
-- [ ] **Step 3: Verify compile**
+- [ ] **Step 3: Commit**
 
 ```bash
-pnpm exec nuxt prepare
-```
-Expected: no errors.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add layers/core/pages/events/\[id\].vue layers/core/components/LocationListItem.vue
-git commit -m "feat(core): add event detail page with location crud"
+git add .
+git commit -m "feat(core): add event detail page with locations CRUD"
 ```
 
 ---
 
-## Task 20: Wire up final dev workflow scripts and verify end-to-end
+## Task 30: `seed-director` + `seed-emulator` scripts
 
 **Files:**
-- Modify: `package.json`
-- Create: `README.md` (minimal getting-started)
+- Create: `scripts/seed-director.ts`, `scripts/seed-emulator.ts`
 
-- [ ] **Step 1: Confirm `package.json` `scripts` (already added in Task 13) match this**
+`seed-director.ts` is the one-off script for staging/prod that creates the very first org + director (per spec §7). `seed-emulator.ts` wraps it for local dev: it talks to the emulator, creates the lila org, a director user, and one event with two locations.
 
-```json
-"scripts": {
-  "build": "nuxt build",
-  "dev": "FIREBASE_USE_EMULATOR=1 concurrently -k -n emu,nuxt -c blue,green \"firebase emulators:start --project festivalmgr-dev --only auth,firestore,functions,storage\" \"nuxt dev\"",
-  "dev:seed": "tsx scripts/seed-director.ts",
-  "test": "vitest run && pnpm --filter functions test",
-  "test:watch": "vitest"
+- [ ] **Step 1: Implement `seed-director.ts`**
+
+```ts
+// scripts/seed-director.ts
+import { initializeApp, cert, getApps } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+
+type Args = {
+  orgId: string
+  orgName: string
+  orgSlug: string
+  email: string
+  displayName: string
+}
+
+export async function seedDirector(args: Args) {
+  if (!getApps().length) {
+    const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
+    initializeApp(credPath ? { credential: cert(credPath) } : {})
+  }
+  const auth = getAuth()
+  const db = getFirestore()
+
+  let user
+  try {
+    user = await auth.getUserByEmail(args.email)
+  }
+  catch {
+    user = await auth.createUser({
+      email: args.email,
+      displayName: args.displayName,
+      emailVerified: true,
+    })
+  }
+
+  await db.doc(`organizations/${args.orgId}`).set({
+    name: args.orgName,
+    slug: args.orgSlug,
+    defaultLocale: 'en',
+    defaultCurrency: 'CHF',
+    enabledModules: ['artists', 'budget', 'booking', 'riders', 'schedule'],
+    createdAt: FieldValue.serverTimestamp(),
+  })
+
+  await db.doc(`organizations/${args.orgId}/memberships/${user.uid}`).set({
+    userId: user.uid,
+    email: args.email.toLowerCase(),
+    role: 'director',
+    invitedBy: user.uid,
+    invitedAt: FieldValue.serverTimestamp(),
+    acceptedAt: FieldValue.serverTimestamp(),
+    status: 'active',
+  })
+
+  await db.doc(`users/${user.uid}`).set({
+    email: args.email.toLowerCase(),
+    displayName: args.displayName,
+    orgIds: [args.orgId],
+    createdAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+
+  await auth.setCustomUserClaims(user.uid, {
+    orgId: args.orgId,
+    role: 'director',
+    orgs: { [args.orgId]: 'director' },
+  })
+
+  return { uid: user.uid }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [orgId, orgName, orgSlug, email, displayName] = process.argv.slice(2)
+  if (!orgId || !email) {
+    console.error('Usage: tsx scripts/seed-director.ts <orgId> <orgName> <orgSlug> <email> <displayName>')
+    process.exit(1)
+  }
+  seedDirector({ orgId, orgName, orgSlug, email, displayName: displayName ?? email })
+    .then(({ uid }) => console.log(`Seeded director ${email} (${uid}) into org ${orgId}.`))
+    .catch((e) => { console.error(e); process.exit(1) })
 }
 ```
 
-- [ ] **Step 2: Write a minimal `README.md`**
+- [ ] **Step 2: Implement `seed-emulator.ts`**
 
-```md
+```ts
+// scripts/seed-emulator.ts
+import { seedDirector } from './seed-director'
+import { getFirestore, Timestamp } from 'firebase-admin/firestore'
+
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
+process.env.GCLOUD_PROJECT = 'festivalmgr-dev'
+
+async function main() {
+  const { uid } = await seedDirector({
+    orgId: 'lila',
+    orgName: 'lila. queer festival e.V.',
+    orgSlug: 'lila',
+    email: 'director@example.com',
+    displayName: 'Lila Director',
+  })
+
+  const db = getFirestore()
+  const eventRef = db.collection('organizations/lila/events').doc('lila-2025')
+  await eventRef.set({
+    name: 'lila. queer festival 2025',
+    slug: 'lila-2025',
+    primaryLocale: 'en',
+    primaryContacts: [uid],
+    status: 'planning',
+    dates: {
+      start: Timestamp.fromDate(new Date('2025-09-12')),
+      end:   Timestamp.fromDate(new Date('2025-09-14')),
+    },
+    publishToPublic: false,
+    createdAt: Timestamp.now(),
+    deletedAt: null,
+  })
+
+  await eventRef.collection('locations').doc('aktionshalle')
+    .set({ name: 'Aktionshalle', capacity: 600, order: 1 })
+  await eventRef.collection('locations').doc('clubraum')
+    .set({ name: 'Clubraum', capacity: 250, order: 2 })
+
+  console.log('Seeded emulator: org=lila, director=director@example.com, event=lila-2025, 2 locations.')
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add .
+git commit -m "feat: add seed-director + seed-emulator scripts"
+```
+
+---
+
+## Task 31: README — dev onboarding
+
+**Files:**
+- Modify: `README.md`
+
+- [ ] **Step 1: Replace `README.md`**
+
+```markdown
 # festivalmgr
 
-Multi-tenant SaaS for festival organization. See `docs/superpowers/specs/2026-05-08-festivalmgr-platform-foundation-design.md` for the full design.
+Cloud-based, multi-tenant SaaS for organizing community-based arts/music/culture festivals.
 
-## Getting started
+## Architecture
 
-Prereqs: Node 20+, pnpm 9+, Firebase CLI.
+See [docs/superpowers/specs/2026-05-08-festivalmgr-platform-foundation-design.md](docs/superpowers/specs/2026-05-08-festivalmgr-platform-foundation-design.md).
+
+## Local development
+
+Prerequisites:
+- Node 22 (`nvm use`)
+- pnpm 9+
+- Firebase CLI is included as a dev dep — invoke as `pnpm exec firebase ...`.
+
+First-time setup:
 
 ```bash
 pnpm install
 cp .env.example .env
-pnpm dev          # starts emulators + Nuxt dev server (also need Functions built)
-pnpm --filter functions build && pnpm --filter functions watch  # in another terminal
-pnpm dev:seed     # seeds the bootstrap director user
+pnpm --filter ./functions install
 ```
 
-Open http://127.0.0.1:3000 — sign in with `dario@example.com`. The Firebase Emulator UI is at http://127.0.0.1:4000.
-
-## Tests
+Run the app + emulators:
 
 ```bash
-pnpm test         # frontend composables + functions
+pnpm dev
 ```
-```
 
-- [ ] **Step 3: Run the full unit suite**
+This boots the Firebase emulator suite (Auth, Firestore, Functions, Storage on ports 9099/8080/5001/9199, UI on 4000) and the Nuxt dev server (port 3000) in parallel.
 
-```bash
-pnpm test
-```
-Expected: all tests pass (composables + functions, with the Firebase emulator running for the functions tests).
+Seed the emulator with a director user, the lila. org, and one event:
 
-- [ ] **Step 4: Run full smoke test against emulators (manual verification)**
-
-In one terminal: `pnpm --filter functions build && pnpm --filter functions watch`
-In another terminal: `pnpm dev`
-Wait for `Listening on http://127.0.0.1:3000` and the emulator UI banner. Then in a third terminal:
 ```bash
 pnpm dev:seed
 ```
 
-Manual verification checklist:
-1. Open `http://127.0.0.1:3000/login`. Sign in with Google (use the emulator's "Add new account" prompt) → lands on dashboard.
-2. Visit `/settings/members` — empty list at first (Google sign-in user is not a member of the org). Confirm UI works.
-3. Sign out. Sign in via magic link as `dario@example.com` (the emulator UI displays the magic link in its "Auth" tab logs).
-4. Confirm dashboard loads, shows email.
-5. Visit `/settings` — change org name → save → reload → name persists.
-6. Visit `/settings/members` — invite `sarah@example.com` as `booker`. The list updates to show a `pending` membership row.
-7. Open the Auth emulator tab → use "Sign in with email link" for `sarah@example.com` → completes sign-in → dashboard renders for Sarah.
-8. As Dario, revoke Sarah's membership → status flips to `revoked`. Sarah's claim is cleared (verify in emulator UI).
-9. Visit `/events` → create new event "lila 2025" with dates → appears in list.
-10. Open the event → add location "Aktionshalle" → it persists.
+Sign in as `director@example.com` from `/login`. The Auth emulator logs the magic-link URL to its console output — open it in the same browser to complete sign-in.
 
-If any step fails, capture the error and fix it before committing this final task.
-
-- [ ] **Step 5: Commit**
+## Tests
 
 ```bash
-git add README.md package.json
-git commit -m "chore: add README and finalize dev scripts"
+pnpm test            # composable unit tests
+pnpm test:functions  # Cloud Functions tests
+```
+
+## Project layout
+
+- `app/` — root entry (`app.vue`, `assets/css/main.css`).
+- `layers/core/` — the always-loaded core layer (auth, org settings, member admin, events, locations).
+  - `app/` — components, composables, pages, plugins, middleware.
+  - `shared/types/` — Firestore document types.
+- `functions/` — Cloud Functions (TypeScript).
+- `scripts/` — one-off ops scripts (`seed-director`, `seed-emulator`).
+- `firestore.rules`, `storage.rules` — **permissive starter rules**, replaced in Plan B.
+
+## What's next
+
+- **Plan B:** layered, role-aware Firestore + Storage rules + emulator rules-test suite.
+- **Plan C:** GitHub Actions CI, Netlify production config, daily Firestore backups.
+- **Module brainstorms:** Artists → Schedule → Booking/Advancing → Riders → Budget.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .
+git commit -m "docs: add dev onboarding README"
 ```
 
 ---
 
-## Self-review (already complete)
+## Task 32: End-to-end smoke check
 
-- Spec coverage: every Section-15-MVP item except items 4, 5, 7, 8 (Plan B / Plan C) is implemented in this plan. Items covered: 1 (repo scaffold) → Task 1–3, 9; 2 (core layer types + composables + login + member admin) → Tasks 4–8, 14–17; 3 (auth flow + claim sync + seed-director) → Tasks 5, 10–13; 6 (local dev workflow) → Tasks 13, 20.
-- Permissive starter rules (`firestore.rules`, `storage.rules`) are explicitly temporary and replaced in Plan B.
-- Type names consistent across tasks: `User.orgIds`, `Membership.status`, `Event.deletedAt`, `Location.order`, `Role` enum, `ModuleKey` union — all match the spec's Section 6 and are reused identically in functions/test/seed code.
-- No `TBD`/`TODO`/`implement later` placeholders. Every step has the actual code or command needed.
+A final manual pass to confirm Plan A is working before handing off.
+
+- [ ] **Step 1: Reset and reseed**
+
+```bash
+rm -rf .emulator-data
+pnpm dev          # in one terminal
+pnpm dev:seed     # in another
+```
+
+- [ ] **Step 2: Sign in as director**
+
+Open http://localhost:3000/login. Enter `director@example.com`, click "Send sign-in link". The emulator UI's Auth tab will show a magic-link URL — open it in the same browser. After redirect you should land on `/` with "You're in lila. queer festival e.V. as director."
+
+- [ ] **Step 3: Invite a teammate**
+
+Navigate to `/settings/members`. Invite `pr@example.com` as `pr`. The new pending row appears.
+
+- [ ] **Step 4: Sign in as the invitee**
+
+Sign out, sign in with `pr@example.com` via magic-link. After redirect, the dashboard should say "You're in lila. queer festival e.V. as pr." The membership row in the director's view should now read `active`.
+
+- [ ] **Step 5: Edit org settings**
+
+As director, change "Default currency" from CHF to EUR in `/settings`. Refresh — the value persists.
+
+- [ ] **Step 6: Add an event + location**
+
+In `/events`, create a second event. Open it. Add a location named "Marktstand". Reload the page — it persists.
+
+- [ ] **Step 7: Revoke**
+
+Back as director, revoke the `pr@example.com` membership. Sign in as `pr@example.com` again — the dashboard should now show the "No organization yet" alert.
+
+- [ ] **Step 8: Run all tests**
+
+```bash
+pnpm test
+pnpm test:functions
+pnpm typecheck
+```
+
+Expected: all green.
+
+- [ ] **Step 9: Final commit if anything was tweaked during smoke**
+
+```bash
+git add .
+git commit -m "chore: smoke-check fixes" || echo "No changes"
+```
+
+---
+
+## Plan A is done
+
+When all tasks are checked off, the foundation supports:
+- Sign-in via magic-link or Google.
+- Multi-tenant data layout with org-level membership.
+- Director can invite, revoke, and edit settings.
+- Anyone in the org can browse events and locations; production+director can edit locations.
+- The Cloud Functions surface (`setMembership`, `revokeMembership`, `claimMembership`) is unit-tested.
+- The emulator dev workflow is one command and reproducible from a clean clone.
+
+**Next:** Plan B (rules + rules tests), then the Artists module brainstorm.
