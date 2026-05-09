@@ -33,12 +33,12 @@ export async function useFmgrClaims() {
   const auth = useFirebaseAuth()
   const claims = ref<FmgrClaims | null>(null)
 
-  async function pull() {
+  async function pull(forceRefresh = false) {
     if (!user.value) {
       claims.value = null
       return
     }
-    const { claims: c } = await user.value.getIdTokenResult()
+    const { claims: c } = await user.value.getIdTokenResult(forceRefresh)
     claims.value = {
       orgId: c.orgId as string | undefined,
       role: c.role as Role | undefined,
@@ -46,13 +46,20 @@ export async function useFmgrClaims() {
     }
   }
 
-  await pull()
-  watch(user, pull)
-
+  // Register listeners BEFORE the first await so onScopeDispose is captured
+  // by the active effect scope (after an await Vue's scope is detached and
+  // onScopeDispose becomes a no-op).
+  watch(user, () => pull())
   if (auth) {
-    const stop = onIdTokenChanged(auth, pull)
+    const stop = onIdTokenChanged(auth, () => pull())
     onScopeDispose(stop)
   }
+
+  // Initial pull with forceRefresh — directly after a magic-link sign-in the
+  // cached token can be the pre-claim one (mint-cookie.client.ts is racing
+  // its own force-refresh in parallel). Forcing here guarantees fresh claims
+  // even if our onIdTokenChanged listener missed the refresh event.
+  await pull(true)
 
   return claims
 }
