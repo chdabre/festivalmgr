@@ -22,6 +22,11 @@ function isValidEvent(d) {
       && d.dates.end is timestamp
       && d.publishToPublic is bool;
 }
+function isValidLocation(d) {
+  return d.keys().hasAll(['name','order'])
+      && d.name is string
+      && d.order is int;
+}
 
 match /organizations/{orgId} {
   allow read:   if inOrg(orgId);
@@ -47,5 +52,16 @@ match /organizations/{orgId} {
                   && isValidEvent(request.resource.data)
                   && fieldUnchanged('slug');
     allow delete: if inOrg(orgId) && hasRole(['director']);
+
+    match /locations/{locationId} {
+      allow read:   if inOrg(orgId);
+      allow create: if inOrg(orgId)
+                    && hasRole(['director','production'])
+                    && isValidLocation(request.resource.data);
+      allow update: if inOrg(orgId)
+                    && hasRole(['director','production'])
+                    && isValidLocation(request.resource.data);
+      allow delete: if inOrg(orgId) && hasRole(['director','production']);
+    }
   }
 }

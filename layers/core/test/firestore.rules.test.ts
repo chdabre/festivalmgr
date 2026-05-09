@@ -240,3 +240,48 @@ describe('organizations/{orgId}/events/{eventId}', () => {
     await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...rest, slug: 'newev' }))
   })
 })
+
+describe('organizations/{orgId}/events/{eventId}/locations/{locationId}', () => {
+  const VALID_LOCATION = { name: 'Aktionshalle', order: 1 }
+
+  beforeEach(async () => {
+    await seedAsAdmin(env, async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `organizations/${ORG_A}/events/lila-2025/locations/loc1`), VALID_LOCATION)
+    })
+  })
+
+  it('member can read', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertSucceeds(getDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc1`)))
+  })
+
+  it('director can write', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc2`), { name: 'Clubraum', order: 2 }))
+  })
+
+  it('production can write', async () => {
+    const db = actingAs(env, PROD_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc2`), { name: 'Clubraum', order: 2 }))
+  })
+
+  it('booker cannot write', async () => {
+    const db = actingAs(env, BOOKER_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc2`), { name: 'Clubraum', order: 2 }))
+  })
+
+  it('crew cannot write', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc2`), { name: 'Clubraum', order: 2 }))
+  })
+
+  it('cross-tenant director cannot write', async () => {
+    const db = actingAs(env, DIRECTOR_B)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc2`), { name: 'Clubraum', order: 2 }))
+  })
+
+  it('rejects create missing required field', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc2`), { name: 'Clubraum' }))
+  })
+})
