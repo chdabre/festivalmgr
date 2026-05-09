@@ -10,6 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '#layers/core': fileURLToPath(new URL('./layers/core', import.meta.url)),
+      '#layers/artists': fileURLToPath(new URL('./layers/artists', import.meta.url)),
     },
   },
 })
