@@ -1,4 +1,4 @@
-<!-- layers/core/app/pages/events/[eventId].vue -->
+<!-- layers/core/app/pages/events/[eventId]/index.vue -->
 <script setup lang="ts">
 import { useFirestore } from 'vuefire'
 import { addDoc, collection, deleteDoc, doc } from 'firebase/firestore'
