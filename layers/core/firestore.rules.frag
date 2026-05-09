@@ -64,6 +64,11 @@ match /organizations/{orgId} {
       allow delete: if inOrg(orgId) && hasRole(['director','production']);
     }
   }
+
+  match /shareLinks/{token} {
+    allow read:   if inOrg(orgId);
+    allow write:  if inOrg(orgId) && hasRole(['director','booker','pr']);
+  }
 }
 
 match /users/{uid} {

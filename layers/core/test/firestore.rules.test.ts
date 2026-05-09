@@ -337,3 +337,54 @@ describe('users/{uid}', () => {
     await assertFails(updateDoc(doc(db, `users/${DIRECTOR_A.uid}`), { displayName: 'Hacked' }))
   })
 })
+
+describe('organizations/{orgId}/shareLinks/{token}', () => {
+  const VALID_SHARELINK = {
+    docPath: `organizations/${ORG_A}/events/lila-2025/artists/abc123`,
+    kind: 'artist-infosheet',
+    allowedFields: ['name', 'stage'],
+    createdBy: DIRECTOR_A.uid,
+    createdAt: Timestamp.now(),
+  }
+
+  beforeEach(async () => {
+    await seedAsAdmin(env, async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `organizations/${ORG_A}/shareLinks/tkn1`), VALID_SHARELINK)
+    })
+  })
+
+  it('member can read', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertSucceeds(getDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn1`)))
+  })
+
+  it('cross-tenant member cannot read', async () => {
+    const db = actingAs(env, DIRECTOR_B)
+    await assertFails(getDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn1`)))
+  })
+
+  it('anon cannot read', async () => {
+    const db = actingAsAnon(env)
+    await assertFails(getDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn1`)))
+  })
+
+  it('director can create', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn2`), VALID_SHARELINK))
+  })
+
+  it('booker can create', async () => {
+    const db = actingAs(env, BOOKER_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn2`), VALID_SHARELINK))
+  })
+
+  it('pr can create', async () => {
+    const db = actingAs(env, PR_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn2`), VALID_SHARELINK))
+  })
+
+  it('crew cannot create', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn2`), VALID_SHARELINK))
+  })
+})
