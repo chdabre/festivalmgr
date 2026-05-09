@@ -15,10 +15,15 @@ function fieldUnchanged(field) {
 
 match /organizations/{orgId} {
   allow read:   if inOrg(orgId);
-  allow create: if false;                                 // server-only via seed-director
+  allow create: if false;
   allow update: if inOrg(orgId)
                 && hasRole(['director'])
                 && isValidOrganization(request.resource.data)
                 && fieldUnchanged('slug');
-  allow delete: if false;                                 // server-only
+  allow delete: if false;
+
+  match /memberships/{userId} {
+    allow read:   if inOrg(orgId);
+    allow write:  if false;                                // server-only via Cloud Functions
+  }
 }

@@ -98,3 +98,63 @@ describe('organizations/{orgId}', () => {
     await assertFails(deleteDoc(doc(db, `organizations/${ORG_A}`)))
   })
 })
+
+describe('organizations/{orgId}/memberships/{userId}', () => {
+  const MEMBERSHIP_A_DIRECTOR = {
+    userId: DIRECTOR_A.uid,
+    role: 'director',
+    invitedBy: 'seed',
+    invitedAt: Timestamp.now(),
+    acceptedAt: Timestamp.now(),
+    status: 'active',
+  }
+
+  beforeEach(async () => {
+    await seedAsAdmin(env, async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `organizations/${ORG_A}/memberships/${DIRECTOR_A.uid}`), MEMBERSHIP_A_DIRECTOR)
+    })
+  })
+
+  it('member can read', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertSucceeds(getDoc(doc(db, `organizations/${ORG_A}/memberships/${DIRECTOR_A.uid}`)))
+  })
+
+  it('cross-tenant member cannot read', async () => {
+    const db = actingAs(env, DIRECTOR_B)
+    await assertFails(getDoc(doc(db, `organizations/${ORG_A}/memberships/${DIRECTOR_A.uid}`)))
+  })
+
+  it('director cannot create membership from client', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/memberships/newUser`), {
+      userId: 'newUser',
+      role: 'crew',
+      invitedBy: DIRECTOR_A.uid,
+      invitedAt: Timestamp.now(),
+      status: 'pending',
+    }))
+  })
+
+  it('crew cannot create membership from client', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/memberships/newUser`), {
+      userId: 'newUser',
+      role: 'crew',
+      invitedBy: CREW_A.uid,
+      invitedAt: Timestamp.now(),
+      status: 'pending',
+    }))
+  })
+
+  it('director cannot update membership from client', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertFails(updateDoc(doc(db, `organizations/${ORG_A}/memberships/${DIRECTOR_A.uid}`), { role: 'crew' }))
+  })
+
+  it('director cannot delete membership from client', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    const { deleteDoc } = await import('firebase/firestore')
+    await assertFails(deleteDoc(doc(db, `organizations/${ORG_A}/memberships/${DIRECTOR_A.uid}`)))
+  })
+})
