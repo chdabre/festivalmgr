@@ -285,3 +285,55 @@ describe('organizations/{orgId}/events/{eventId}/locations/{locationId}', () => 
     await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/lila-2025/locations/loc2`), { name: 'Clubraum' }))
   })
 })
+
+describe('users/{uid}', () => {
+  const USER_A_DIRECTOR = {
+    email: 'director@example.com',
+    displayName: 'Dir A',
+    orgIds: [ORG_A],
+    createdAt: Timestamp.now(),
+  }
+  const USER_B_DIRECTOR = {
+    email: 'directorB@example.com',
+    displayName: 'Dir B',
+    orgIds: [ORG_B],
+    createdAt: Timestamp.now(),
+  }
+
+  beforeEach(async () => {
+    await seedAsAdmin(env, async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${DIRECTOR_A.uid}`), USER_A_DIRECTOR)
+      await setDoc(doc(ctx.firestore(), `users/${DIRECTOR_B.uid}`), USER_B_DIRECTOR)
+    })
+  })
+
+  it('user can read own doc', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertSucceeds(getDoc(doc(db, `users/${DIRECTOR_A.uid}`)))
+  })
+
+  it('same-org member can read another user doc', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertSucceeds(getDoc(doc(db, `users/${DIRECTOR_A.uid}`)))
+  })
+
+  it('cross-org user cannot read', async () => {
+    const db = actingAs(env, DIRECTOR_B)
+    await assertFails(getDoc(doc(db, `users/${DIRECTOR_A.uid}`)))
+  })
+
+  it('anon cannot read', async () => {
+    const db = actingAsAnon(env)
+    await assertFails(getDoc(doc(db, `users/${DIRECTOR_A.uid}`)))
+  })
+
+  it('user can update own doc', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertSucceeds(updateDoc(doc(db, `users/${DIRECTOR_A.uid}`), { displayName: 'Director Renamed' }))
+  })
+
+  it('user cannot update another user doc', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertFails(updateDoc(doc(db, `users/${DIRECTOR_A.uid}`), { displayName: 'Hacked' }))
+  })
+})

@@ -65,3 +65,11 @@ match /organizations/{orgId} {
     }
   }
 }
+
+match /users/{uid} {
+  allow read:   if isSignedIn() && (
+                    request.auth.uid == uid ||
+                    claimOrgId() in resource.data.orgIds
+                  );
+  allow write:  if request.auth.uid == uid;
+}
