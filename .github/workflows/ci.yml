@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase
+          key: firebase-emulators-${{ runner.os }}-v1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build functions (needed by emulators:exec)
+        run: pnpm --filter ./functions build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Composable unit tests
+        run: pnpm test
+
+      - name: Functions tests
+        run: pnpm test:functions
+
+      - name: Rules check (compose + emulator-based rules tests)
+        run: pnpm rules:check
