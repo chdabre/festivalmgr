@@ -8,6 +8,12 @@ export type Organization = {
   defaultLocale: string
   defaultCurrency: string
   enabledModules: ModuleKey[]
+  /**
+   * Optional per-org list of artist-category suggestions. UI offers them as
+   * suggestions but `Artist.category` remains free-form so a typo doesn't
+   * block creation. Default: empty / undefined.
+   */
+  artistCategories?: string[]
   branding?: {
     logoStoragePath?: string
     primaryColor?: string
