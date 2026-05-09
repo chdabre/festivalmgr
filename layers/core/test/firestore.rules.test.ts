@@ -158,3 +158,85 @@ describe('organizations/{orgId}/memberships/{userId}', () => {
     await assertFails(deleteDoc(doc(db, `organizations/${ORG_A}/memberships/${DIRECTOR_A.uid}`)))
   })
 })
+
+describe('organizations/{orgId}/events/{eventId}', () => {
+  const VALID_EVENT = {
+    name: 'lila. queer festival 2025',
+    slug: 'lila-2025',
+    primaryLocale: 'en',
+    status: 'planning',
+    dates: { start: Timestamp.now(), end: Timestamp.now() },
+    publishToPublic: false,
+    createdAt: Timestamp.now(),
+  }
+
+  beforeEach(async () => {
+    await seedAsAdmin(env, async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `organizations/${ORG_A}/events/lila-2025`), VALID_EVENT)
+    })
+  })
+
+  it('member can read', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertSucceeds(getDoc(doc(db, `organizations/${ORG_A}/events/lila-2025`)))
+  })
+
+  it('cross-tenant member cannot read', async () => {
+    const db = actingAs(env, DIRECTOR_B)
+    await assertFails(getDoc(doc(db, `organizations/${ORG_A}/events/lila-2025`)))
+  })
+
+  it('director can create', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...VALID_EVENT, slug: 'newev' }))
+  })
+
+  it('booker can create', async () => {
+    const db = actingAs(env, BOOKER_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...VALID_EVENT, slug: 'newev' }))
+  })
+
+  it('production can create', async () => {
+    const db = actingAs(env, PROD_A)
+    await assertSucceeds(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...VALID_EVENT, slug: 'newev' }))
+  })
+
+  it('pr cannot create', async () => {
+    const db = actingAs(env, PR_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...VALID_EVENT, slug: 'newev' }))
+  })
+
+  it('crew cannot create', async () => {
+    const db = actingAs(env, CREW_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...VALID_EVENT, slug: 'newev' }))
+  })
+
+  it('director can delete', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    const { deleteDoc } = await import('firebase/firestore')
+    await assertSucceeds(deleteDoc(doc(db, `organizations/${ORG_A}/events/lila-2025`)))
+  })
+
+  it('booker cannot delete', async () => {
+    const db = actingAs(env, BOOKER_A)
+    const { deleteDoc } = await import('firebase/firestore')
+    await assertFails(deleteDoc(doc(db, `organizations/${ORG_A}/events/lila-2025`)))
+  })
+
+  it('rejects slug change on update', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertFails(updateDoc(doc(db, `organizations/${ORG_A}/events/lila-2025`), { slug: 'changed' }))
+  })
+
+  it('rejects invalid status enum', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...VALID_EVENT, slug: 'newev', status: 'bogus' }))
+  })
+
+  it('rejects create missing required field', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    const { name, ...rest } = VALID_EVENT
+    void name
+    await assertFails(setDoc(doc(db, `organizations/${ORG_A}/events/newev`), { ...rest, slug: 'newev' }))
+  })
+})
