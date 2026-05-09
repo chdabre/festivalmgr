@@ -6,7 +6,7 @@
     "loginTitle": "Sign in to festivalmgr",
     "magicLinkLabel": "Send sign-in link",
     "googleLabel": "Continue with Google",
-    "emailPlaceholder": "you@example.com"
+    "emailPlaceholder": "you{'@'}example.com"
   },
   "nav": {
     "events": "Events",
