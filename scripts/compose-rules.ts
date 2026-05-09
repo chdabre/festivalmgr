@@ -47,7 +47,23 @@ function loadFragment(layer: string, kind: 'firestore' | 'storage'): string | nu
       `${path}: fragment must not contain 'rules_version' or 'service' — composer emits the envelope.`,
     )
   }
-  return content
+  return normalizeFragment(content)
+}
+
+/**
+ * Normalizes a fragment body so it can be cleanly concatenated inside the
+ * envelope's inner `match` block:
+ *   - Strips trailing whitespace/newlines.
+ *   - Indents every non-empty line by 4 spaces (blank lines stay blank).
+ *   - Appends exactly one trailing newline.
+ */
+function normalizeFragment(body: string): string {
+  const trimmed = body.replace(/\s+$/, '')
+  const indented = trimmed
+    .split('\n')
+    .map((line) => (line.length === 0 ? '' : `    ${line}`))
+    .join('\n')
+  return `${indented}\n`
 }
 
 function composeFirestore(): string {

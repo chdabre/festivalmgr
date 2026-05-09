@@ -13,7 +13,7 @@ service cloud.firestore {
     function hasRole(roles)  { return isSignedIn() && claimRole() in roles; }
 
     // ─── core layer fragment ───
-// Core layer Firestore rules. Per-collection rules added in subsequent tasks.
+    // Core layer Firestore rules. Per-collection rules added in subsequent tasks.
 
   }
 }

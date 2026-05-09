@@ -6,11 +6,11 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     // ─── core layer fragment ───
-// Core layer Storage rules. Deny all by default; module fragments
-// (Riders, Artists, Org branding) introduce paths as they land.
-match /{allPaths=**} {
-  allow read, write: if false;
-}
+    // Core layer Storage rules. Deny all by default; module fragments
+    // (Riders, Artists, Org branding) introduce paths as they land.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
 
   }
 }
