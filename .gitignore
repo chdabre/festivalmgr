@@ -8,6 +8,7 @@ dist
 !.env.example
 .DS_Store
 .emulator-data/
+functions/lib/
 firebase-debug.log
 firestore-debug.log
 storage-debug.log

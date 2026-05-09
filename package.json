@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n nuxt,emu \"nuxt dev\" \"firebase emulators:start --import=./.emulator-data --export-on-exit\"",
+    "dev": "pnpm --filter ./functions build && concurrently -k -n emu,fn,nuxt \"firebase emulators:start --project=demo-festivalmgr-dev --import=./.emulator-data --export-on-exit\" \"pnpm --filter ./functions build:watch\" \"node scripts/wait-for-emulators.mjs && nuxt dev\"",
     "dev:seed": "tsx scripts/seed-emulator.ts",
     "build": "nuxt build",
     "preview": "nuxt preview",

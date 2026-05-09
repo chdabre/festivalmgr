@@ -4,7 +4,7 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
-process.env.GCLOUD_PROJECT = 'festivalmgr-dev'
+process.env.GCLOUD_PROJECT = 'demo-festivalmgr-dev'
 
 async function main() {
   const { uid } = await seedDirector({
