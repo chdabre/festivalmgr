@@ -1,6 +1,7 @@
 // scripts/seed-emulator.ts
 import { seedDirector } from './seed-director'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { defaultArtistChecklistTemplate } from '../layers/core/shared/lib/default-checklist'
 
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
@@ -28,6 +29,7 @@ async function main() {
       end:   Timestamp.fromDate(new Date('2025-09-14')),
     },
     publishToPublic: false,
+    artistChecklistTemplate: defaultArtistChecklistTemplate(),
     createdAt: Timestamp.now(),
     deletedAt: null,
   })
