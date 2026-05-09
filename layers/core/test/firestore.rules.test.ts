@@ -388,3 +388,30 @@ describe('organizations/{orgId}/shareLinks/{token}', () => {
     await assertFails(setDoc(doc(db, `organizations/${ORG_A}/shareLinks/tkn2`), VALID_SHARELINK))
   })
 })
+
+describe('publicEvent/{slug}', () => {
+  beforeEach(async () => {
+    await seedAsAdmin(env, async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `publicEvent/lila-2025`), {
+        orgId: ORG_A,
+        eventId: 'lila-2025',
+        name: 'lila. queer festival 2025',
+      })
+    })
+  })
+
+  it('anon can read', async () => {
+    const db = actingAsAnon(env)
+    await assertSucceeds(getDoc(doc(db, `publicEvent/lila-2025`)))
+  })
+
+  it('authenticated client cannot create', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertFails(setDoc(doc(db, `publicEvent/new-slug`), { orgId: ORG_A, eventId: 'lila-2025', name: 'x' }))
+  })
+
+  it('authenticated client cannot update', async () => {
+    const db = actingAs(env, DIRECTOR_A)
+    await assertFails(updateDoc(doc(db, `publicEvent/lila-2025`), { name: 'modified' }))
+  })
+})

@@ -78,3 +78,8 @@ match /users/{uid} {
                   );
   allow write:  if request.auth.uid == uid;
 }
+
+match /publicEvent/{slug} {
+  allow read:   if true;                              // world-readable, intentional
+  allow write:  if false;                             // only via Function trigger
+}
