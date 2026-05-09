@@ -27,6 +27,9 @@ importers:
         specifier: ^4.2.4
         version: 4.2.4
     devDependencies:
+      '@firebase/rules-unit-testing':
+        specifier: ^5.0.1
+        version: 5.0.1(firebase@12.13.0)
       '@nuxt/eslint':
         specifier: ^1.0.0
         version: 1.15.2(@typescript-eslint/utils@8.59.2(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3))(@vue/compiler-sfc@3.5.34)(eslint@9.39.4(jiti@2.7.0))(magicast@0.5.2)(typescript@5.9.3)(vite@7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.4))
@@ -1255,6 +1258,12 @@ packages:
     resolution: {integrity: sha512-ggGKAaLy9YNOvpFoQZgm5p5SiFw3ZFtwti08dojnBQmQicpThTxvG5xZMSpCTYMj2o3gM/yK9CVd2w+kZub8YA==}
     peerDependencies:
       '@firebase/app': 0.x
+
+  '@firebase/rules-unit-testing@5.0.1':
+    resolution: {integrity: sha512-EvbxUvgoY2cG7vgtdhKc7gjalKzeO3AWr2NiUuyEEmcXaSaOJanV3hXLj3Viigs+Y/jFYQmtVPpSoiwUs/ZlPg==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      firebase: ^12.0.0
 
   '@firebase/storage-compat@0.4.3':
     resolution: {integrity: sha512-gruVqjtUGX8tEoeNbaWXZm0Zfcfcb7fvmDmBxV8yPAbWvExRnZYLO2+qw9idxNE7BvPXt5csyjSYHy//dAizxw==}
@@ -10142,6 +10151,10 @@ snapshots:
       '@firebase/logger': 0.5.1
       '@firebase/util': 1.15.1
       tslib: 2.8.1
+
+  '@firebase/rules-unit-testing@5.0.1(firebase@12.13.0)':
+    dependencies:
+      firebase: 12.13.0
 
   '@firebase/storage-compat@0.4.3(@firebase/app-compat@0.5.12)(@firebase/app-types@0.9.5)(@firebase/app@0.14.12)':
     dependencies:

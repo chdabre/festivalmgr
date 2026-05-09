@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "pnpm --filter ./functions build && concurrently -k -n emu,fn,nuxt \"firebase emulators:start --project=demo-festivalmgr-dev --import=./.emulator-data --export-on-exit\" \"pnpm --filter ./functions build:watch\" \"node scripts/wait-for-emulators.mjs && nuxt dev\"",
     "dev:seed": "tsx scripts/seed-emulator.ts",
+    "rules:compose": "tsx scripts/compose-rules.ts",
+    "rules:test": "vitest run --config vitest.config.rules.ts",
+    "rules:check": "pnpm rules:compose && firebase emulators:exec --only firestore,storage --project=demo-festivalmgr-rules-test 'pnpm rules:test'",
     "build": "nuxt build",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck && pnpm --filter ./functions typecheck",
@@ -15,6 +18,7 @@
     "seed:director": "tsx scripts/seed-director.ts"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@nuxt/eslint": "^1.0.0",
     "@nuxtjs/i18n": "^10.3.0",
     "@vue/test-utils": "^2.4.10",
