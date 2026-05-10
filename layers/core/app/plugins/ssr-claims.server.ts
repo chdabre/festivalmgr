@@ -23,11 +23,9 @@ export default defineNuxtPlugin(() => {
   if (!payload) return
 
   try {
-    const padded = payload + '='.repeat((-payload.length) % 4)
-    const json = Buffer.from(
-      padded.replace(/-/g, '+').replace(/_/g, '/'),
-      'base64',
-    ).toString('utf8')
+    // Node's base64url decoder handles missing '=' padding and the
+    // url-safe '-' / '_' alphabet — no manual repad needed.
+    const json = Buffer.from(payload, 'base64url').toString('utf8')
     const p = JSON.parse(json) as Record<string, unknown>
     event.context.fmgrClaims = {
       orgId: typeof p.orgId === 'string' ? p.orgId : undefined,
